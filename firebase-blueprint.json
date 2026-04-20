@@ -1,0 +1,108 @@
+{
+  "entities": {
+    "User": {
+      "title": "User Profile",
+      "description": "Public/Private wrapper for user identity",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "createdAt"]
+    },
+    "UserPrivateProfile": {
+      "title": "User Private Info",
+      "description": "PII for a user, containing name, phone, and address list",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "phone": { "type": "string" },
+        "addresses": {
+          "type": "array",
+          "items": {
+             "type": "object",
+             "properties": {
+                "id": { "type": "string" },
+                "cep": { "type": "string" },
+                "street": { "type": "string" },
+                "houseNumber": { "type": "string" },
+                "reference": { "type": "string" },
+                "cityState": { "type": "string" },
+                "lat": { "type": "number" },
+                "lng": { "type": "number" }
+             }
+          }
+        },
+        "activeAddressId": { "type": "string" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "phone", "addresses", "activeAddressId", "updatedAt"]
+    },
+    "Market": {
+      "title": "Market",
+      "description": "A marketplace or store",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "rating": { "type": "number" },
+        "deliveryTime": { "type": "string" },
+        "fee": { "type": "number" },
+        "img": { "type": "string" },
+        "categories": { "type": "array", "items": { "type": "string" } },
+        "isActive": { "type": "boolean" }
+      },
+      "required": ["name", "rating", "deliveryTime", "fee", "img", "categories", "isActive"]
+    },
+    "Product": {
+      "title": "Product",
+      "description": "Item sold in a market",
+      "type": "object",
+      "properties": {
+        "marketId": { "type": "string" },
+        "name": { "type": "string" },
+        "category": { "type": "string" },
+        "price": { "type": "number" },
+        "unit": { "type": "string" },
+        "img": { "type": "string" }
+      },
+      "required": ["marketId", "name", "category", "price", "unit", "img"]
+    },
+    "Order": {
+      "title": "Order",
+      "description": "A completed checkout submitted by a user",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "marketId": { "type": "string" },
+        "marketName": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "prep", "delivery", "finished", "canceled"] },
+        "total": { "type": "number" },
+        "items": { 
+          "type": "array", 
+          "items": { "type": "object", "properties": { "id": {"type": "string"}, "name": {"type": "string"}, "price": {"type": "number"}, "qty": {"type": "number"} } } 
+        },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "marketId", "marketName", "status", "total", "items", "createdAt", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}/private/info": {
+      "schema": { "$ref": "#/entities/UserPrivateProfile" },
+      "description": "Stores user PII isolated from public search"
+    },
+    "/markets/{marketId}": {
+      "schema": { "$ref": "#/entities/Market" },
+      "description": "All available stores"
+    },
+    "/products/{productId}": {
+      "schema": { "$ref": "#/entities/Product" },
+      "description": "Products specific to a given market (reference by marketId)"
+    },
+    "/orders/{orderId}": {
+      "schema": { "$ref": "#/entities/Order" },
+      "description": "Orders created by users for markets"
+    }
+  }
+}

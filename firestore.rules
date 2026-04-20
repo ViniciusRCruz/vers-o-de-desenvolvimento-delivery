@@ -1,0 +1,137 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global Safety Net default-deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- PRIMITIVES --- //
+    function isSignedIn() {
+      return request.auth != null; // Relaxed for the demo Google Auth without email verification blocks sometimes in development
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-\\.]+$');
+    }
+    function incoming() { return request.resource.data; }
+    function existing() { return resource.data; }
+    function isOwner(userId) { return isSignedIn() && request.auth.uid == userId; }
+
+    // --- SYSTEM ADMIN MULTI-TIER LOGIC ---
+    function isSystemAdmin() {
+      return isSignedIn() && (
+        request.auth.token.email == 'vinissoba@gmail.com' ||
+        exists(/databases/$(database)/documents/system_admins/$(request.auth.token.email))
+      );
+    }
+    
+    function isMarketAdmin(marketId) {
+      return isSystemAdmin() || (
+        isSignedIn() && request.auth.token.email in get(/databases/$(database)/documents/markets/$(marketId)).data.adminEmails
+      );
+    }
+
+    // --- BLUEPRINTS --- //
+    function isValidUserPrivateProfile(data) {
+      return data.keys().hasAll(['name', 'phone', 'addresses', 'activeAddressId', 'updatedAt']) 
+        && data.keys().size() == 5
+        && data.name is string && data.name.size() > 0 && data.name.size() <= 100
+        && data.phone is string && data.phone.size() <= 20
+        && data.addresses is list && data.addresses.size() <= 20
+        && (data.addresses.size() == 0 || (
+            data.addresses[0] is map 
+            && data.addresses[0].keys().hasAll(['id', 'cep', 'street', 'houseNumber', 'reference', 'cityState', 'lat', 'lng'])
+        ))
+        && data.activeAddressId is string && data.activeAddressId.size() <= 128
+        && data.updatedAt == request.time;
+    }
+
+    function isValidOrder(data) {
+      return data.keys().hasAll(['userId', 'marketId', 'marketName', 'status', 'total', 'items', 'createdAt', 'updatedAt'])
+        && data.keys().size() == 8
+        && data.userId == request.auth.uid
+        && data.marketId is string && data.marketId.size() <= 128
+        && data.marketName is string && data.marketName.size() <= 100
+        && data.status is string && data.status.matches('^(pending|prep|delivery|finished|canceled)$')
+        && data.total is number 
+        && data.items is list && data.items.size() > 0 && data.items.size() <= 100
+        && data.items[0] is map 
+        // Note: checking deep list schema inside rules is limited, but we constrain size and general type
+        && data.createdAt == request.time
+        && data.updatedAt == request.time;
+    }
+
+    // --- COLLECTIONS --- //
+
+    match /system_admins/{adminEmail} {
+      allow get: if isSystemAdmin();
+      allow list: if isSystemAdmin();
+      allow create, update: if isSystemAdmin()
+        && incoming().diff(existing()).affectedKeys().hasOnly(['email', 'createdAt'])
+        && incoming().email == adminEmail
+        && incoming().createdAt == request.time;
+      allow delete: if isSystemAdmin() && adminEmail != 'vinissoba@gmail.com';
+    }
+
+    match /users/{userId}/private/info {
+      allow get: if isValidId(userId) && isOwner(userId);
+      // Explicit list protection: nobody should list all users' private info
+      allow list: if false; 
+      
+      allow create: if isValidId(userId) 
+        && isOwner(userId)
+        && isValidUserPrivateProfile(incoming());
+        
+      allow update: if isValidId(userId) 
+        && isOwner(userId)
+        && incoming().diff(existing()).affectedKeys().hasOnly(['name', 'phone', 'addresses', 'activeAddressId', 'updatedAt'])
+        && isValidUserPrivateProfile(incoming());
+        
+      allow delete: if isValidId(userId) && isOwner(userId);
+    }
+
+    match /markets/{marketId} {
+      // Allow read to any signed in user
+      allow get: if isValidId(marketId) && isSignedIn();
+      allow list: if isSignedIn() && existing().isActive == true; // Only active markets
+      
+      // Update logic based on whether you are system admin or market admin
+      allow create: if isSystemAdmin();
+      allow update: if isMarketAdmin(marketId);
+      allow delete: if isSystemAdmin();
+    }
+
+    match /products/{productId} {
+      allow get: if isValidId(productId) && isSignedIn();
+      // Safe list query, validating we are just reading products
+      allow list: if isSignedIn(); 
+      // Using .data mapping over get constraints
+      allow create, update, delete: if isSystemAdmin() || (isSignedIn() && existing().marketId != null && isMarketAdmin(existing().marketId)) || (isSignedIn() && incoming().marketId != null && isMarketAdmin(incoming().marketId));
+    }
+
+    match /orders/{orderId} {
+      // Read logic: owner only
+      allow get: if isValidId(orderId) && isSignedIn() && existing().userId == request.auth.uid;
+      allow list: if isSignedIn() && existing().userId == request.auth.uid;
+
+      allow create: if isValidId(orderId)
+        && isSignedIn()
+        && isValidOrder(incoming());
+
+      allow update: if isValidId(orderId)
+        && isSignedIn()
+        && existing().userId == request.auth.uid
+        && incoming().userId == existing().userId // Immortal field
+        && incoming().createdAt == existing().createdAt // Immortal field
+        && existing().status != 'finished' && existing().status != 'canceled' // Terminal state lock
+        // Client can only cancel an order if it's pending. Admins/System update other statuses through backend
+        && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt'])
+        && incoming().status == 'canceled'
+        && existing().status == 'pending'
+        && incoming().updatedAt == request.time;
+        
+      allow delete: if false; // Immutable audit trail
+    }
+  }
+}
