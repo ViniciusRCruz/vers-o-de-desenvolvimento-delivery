@@ -1,15 +1,32 @@
-import React from 'react';
+import React, { useState, useMemo } from 'react';
 import Header from '../components/Header';
 import { MARKETS } from '../data/mockData';
 import { Star, Clock, Bike, ArrowRight } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAppContext } from '../context/AppContext';
 
+export const MARKET_CATEGORIES = ['Mercado', 'Hortifruti', 'Carnes', 'Bebidas', 'Padaria', 'Limpeza', 'Pet Shop', 'Farmácia', 'Conveniência'];
+
 export default function HomeList() {
   const navigate = useNavigate();
-  const { selectedCity } = useAppContext();
+  const { selectedCity, adminMarkets } = useAppContext();
+  const [activeCategory, setActiveCategory] = useState('Todos');
   
-  const cityMarkets = MARKETS.filter(m => m.cityId === selectedCity.id);
+  // Combina mercados do mock data (para fallback) com os injetados pelo firebase via adminMarkets
+  // garantindo que não duplique (já que no AdminDashboard os mocks são loadados no start também)
+  const allMarkets = useMemo(() => {
+     const uniqueMap = new Map();
+     MARKETS.forEach(m => uniqueMap.set(m.id, m));
+     adminMarkets.forEach(m => uniqueMap.set(m.id, m));
+     return Array.from(uniqueMap.values());
+  }, [adminMarkets]);
+  
+  const cityMarkets = allMarkets.filter(m => m.cityId === selectedCity.id || m.cityId === selectedCity.name);
+  
+  const displayMarkets = cityMarkets.filter(m => {
+    if (activeCategory === 'Todos') return true;
+    return m.categories && m.categories.includes(activeCategory);
+  });
 
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col font-sans">
@@ -31,26 +48,33 @@ export default function HomeList() {
 
         {/* Categories Pills */}
         <div className="flex gap-4 overflow-x-auto pb-4 hide-scrollbar">
-          {['Todos', 'Hortifruti', 'Carnes', 'Bebidas', 'Padaria', 'Limpeza', 'Pet Shop'].map((cat, i) => (
-            <button key={i} className={`whitespace-nowrap px-6 py-2.5 rounded-full font-bold text-sm transition-all shadow-sm border ${i === 0 ? 'bg-green-600 text-white border-green-600' : 'bg-white text-slate-600 border-slate-200 hover:border-green-300 hover:text-green-600'}`}>
-              {cat}
-            </button>
-          ))}
+          {['Todos', ...MARKET_CATEGORIES].map((cat, i) => {
+            const isActive = activeCategory === cat;
+            return (
+              <button 
+                key={cat} 
+                onClick={() => setActiveCategory(cat)}
+                className={`whitespace-nowrap px-6 py-2.5 rounded-full font-bold text-sm transition-all shadow-sm border ${isActive ? 'bg-green-600 text-white border-green-600' : 'bg-white text-slate-600 border-slate-200 hover:border-green-300 hover:text-green-600'}`}
+              >
+                {cat}
+              </button>
+            )
+          })}
         </div>
 
         {/* Markets List */}
         <div>
           <h2 className="text-xl font-bold text-slate-800 mb-6">Lojas Próximas em {selectedCity.name}</h2>
           
-          {cityMarkets.length === 0 ? (
+          {displayMarkets.length === 0 ? (
             <div className="bg-white rounded-2xl p-10 shadow-sm border border-slate-100 flex flex-col items-center justify-center text-center">
               <div className="text-6xl mb-4">🏪</div>
-              <h3 className="text-xl font-bold text-slate-800 mb-2">Poxa, ainda não chegamos aqui!</h3>
-              <p className="text-slate-500 max-w-sm">No momento não temos mercados cadastrados em {selectedCity.name}. Expanda nossa área em breve!</p>
+              <h3 className="text-xl font-bold text-slate-800 mb-2">Não encontramos lojas.</h3>
+              <p className="text-slate-500 max-w-sm">Nenhum estabelecimento da categoria "{activeCategory}" atende em {selectedCity.name} no momento.</p>
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {cityMarkets.map(market => (
+              {displayMarkets.map(market => (
                 <div 
                   key={market.id} 
                   onClick={() => navigate(`/store/${market.id}`)}

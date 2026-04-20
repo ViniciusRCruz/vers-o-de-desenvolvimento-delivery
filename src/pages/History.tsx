@@ -42,7 +42,7 @@ export default function History() {
                        <Store className="w-5 h-5 text-slate-400" />
                        <h3 className="font-bold text-lg text-slate-800">{order.marketName}</h3>
                     </div>
-                    <span className="text-sm text-slate-500 flex items-center gap-1"><Clock className="w-3 h-3" /> {order.date} • {order.id}</span>
+                    <span className="text-sm text-slate-500 flex items-center gap-1"><Clock className="w-3 h-3" /> {new Date(order.createdAt || order.date).toLocaleDateString('pt-BR')} • {order.id.slice(0, 8)}</span>
                   </div>
                   <div className="bg-slate-100 text-slate-600 px-3 py-1 rounded-lg text-sm font-semibold">
                     {order.status}

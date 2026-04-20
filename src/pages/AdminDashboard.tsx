@@ -4,10 +4,103 @@ import Header from '../components/Header';
 import { useAppContext } from '../context/AppContext';
 import { ShieldCheck, Store, MapPin, Search, ArrowRight, UserPlus, PackagePlus } from 'lucide-react';
 
+import { auth, db, handleFirestoreError } from '../lib/firebase';
+import { doc, getDoc, collection, setDoc, serverTimestamp, arrayUnion } from 'firebase/firestore';
+
 export default function AdminDashboard() {
-  const { isLoggedIn, isSystemAdmin, adminMarkets, currentUser } = useAppContext();
+  const { isLoggedIn, isSystemAdmin, adminMarkets, currentUser, updateAdminMarkets } = useAppContext();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<'markets' | 'products' | 'system'>('markets');
+  
+  // Market Form State
+  const [isAddingMarket, setIsAddingMarket] = useState(false);
+  const [newMarket, setNewMarket] = useState({ name: '', cityId: 'São Paulo, SP', img: '🏪', deliveryTime: 45, fee: 0, categories: [] as string[] });
+
+  // Use MARKET_CATEGORIES from HomeList or declare here.
+  const MARKET_CATEGORIES = ['Mercado', 'Hortifruti', 'Carnes', 'Bebidas', 'Padaria', 'Limpeza', 'Pet Shop', 'Farmácia', 'Conveniência'];
+
+  const toggleCategory = (cat: string) => {
+     setNewMarket(prev => {
+        if(prev.categories.includes(cat)) {
+           return {...prev, categories: prev.categories.filter(c => c !== cat)}
+        } else {
+           return {...prev, categories: [...prev.categories, cat]}
+        }
+     });
+  };
+
+  // Product Form State
+  const [selectedMarketId, setSelectedMarketId] = useState('');
+  const [isAddingProduct, setIsAddingProduct] = useState(false);
+  const [newProduct, setNewProduct] = useState({ name: '', price: 0, oldPrice: 0, unit: 'unidade', description: '', category: 'Alimentos', image: 'https://picsum.photos/seed/fruit/200/200' });
+
+  // Update selected store to be always the first one when markets load
+  useEffect(() => {
+    if(adminMarkets.length > 0 && !selectedMarketId) {
+      setSelectedMarketId(adminMarkets[0].id);
+    }
+  }, [adminMarkets]);
+
+  const handleCreateProduct = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if(!selectedMarketId || !currentUser) return;
+    
+    try {
+       const productId = `prod_${Date.now()}`;
+       const docRef = doc(db, 'products', productId);
+       const prodStruct = {
+          name: newProduct.name,
+          price: newProduct.price,
+          oldPrice: newProduct.oldPrice || null,
+          unit: newProduct.unit,
+          description: newProduct.description,
+          category: newProduct.category,
+          image: newProduct.image,
+          marketId: selectedMarketId,
+          isActive: true,
+          createdAt: serverTimestamp()
+       };
+       await setDoc(docRef, prodStruct);
+       alert(`Produto [${newProduct.name}] salvo no banco!`);
+       setIsAddingProduct(false);
+       setNewProduct({ name: '', price: 0, oldPrice: 0, unit: 'unidade', description: '', category: 'Alimentos', image: 'https://picsum.photos/seed/fruit/200/200' });
+    } catch(err) {
+       console.error("Failed creating product", err);
+       alert("Erro ao salvar produto.");
+    }
+  }
+
+  const handleCreateMarket = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if(!isSystemAdmin || !currentUser) return;
+    
+    try {
+       const marketId = `mkt_${Date.now()}`;
+       const docRef = doc(db, 'markets', marketId);
+       const marketStruct = {
+          name: newMarket.name,
+          cityId: newMarket.cityId,
+          img: newMarket.img,
+          deliveryTime: newMarket.deliveryTime,
+          fee: newMarket.fee,
+          rating: 5.0,
+          categories: newMarket.categories.length > 0 ? newMarket.categories : ['Mercado'], // Fallback se não marcar nada
+          isActive: true,
+          adminEmails: [currentUser.email],
+          createdAt: serverTimestamp()
+       };
+       await setDoc(docRef, marketStruct);
+       // Refresh via context or local state
+       if(updateAdminMarkets) {
+         updateAdminMarkets([...adminMarkets, { id: marketId, ...marketStruct }]);
+       }
+       setIsAddingMarket(false);
+       setNewMarket({ name: '', cityId: 'São Paulo, SP', img: '🏪', deliveryTime: 45, fee: 0, categories: [] });
+    } catch(err) {
+       console.error("Failed creating market", err);
+       alert("Erro de permissão ou rede ao criar mercado.");
+    }
+  }
 
   useEffect(() => {
     // Immediate redirect if explicitly unauthorized (fully initialized but lacking permissions)
@@ -78,14 +171,51 @@ export default function AdminDashboard() {
         <div className="flex flex-col gap-6">
            {activeTab === 'markets' && (
               <div className="flex flex-col gap-6">
-                 <div className="flex justify-between items-center">
+                 <div className="flex justify-between items-center flex-wrap gap-4">
                     <h2 className="text-xl font-bold text-slate-800">Lojas Gerenciadas ({adminMarkets.length})</h2>
                     {isSystemAdmin && (
-                       <button className="bg-green-600 hover:bg-green-700 text-white px-5 py-2.5 rounded-xl font-bold text-sm shadow-md transition-colors flex items-center gap-2">
-                          <Store className="w-4 h-4" /> Nova Loja
+                       <button 
+                         onClick={() => setIsAddingMarket(!isAddingMarket)}
+                         className="bg-green-600 hover:bg-green-700 text-white px-5 py-2.5 rounded-xl font-bold text-sm shadow-md transition-colors flex items-center gap-2"
+                       >
+                          <Store className="w-4 h-4" /> {isAddingMarket ? 'Cancelar' : 'Nova Loja'}
                        </button>
                     )}
                  </div>
+
+                 {isAddingMarket && isSystemAdmin && (
+                    <form onSubmit={handleCreateMarket} className="bg-white border text-left border-green-200 rounded-2xl p-6 shadow-sm flex flex-col gap-4 animate-in fade-in slide-in-from-top-4">
+                       <h3 className="font-bold text-green-800">Cadastrar Novo Estabelecimento</h3>
+                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <input type="text" placeholder="Nome da Loja" required className="border p-3 rounded-lg outline-none focus:border-green-500" value={newMarket.name} onChange={e => setNewMarket({...newMarket, name: e.target.value})} />
+                          <select className="border p-3 rounded-lg outline-none focus:border-green-500" value={newMarket.cityId} onChange={e => setNewMarket({...newMarket, cityId: e.target.value})}>
+                            {['São Paulo, SP', 'Cascavel, PR'].map(c => <option key={c} value={c}>{c}</option>)}
+                          </select>
+                          <div className="flex gap-4">
+                            <input type="number" placeholder="Tempo Médio (min)" required className="border p-3 rounded-lg outline-none focus:border-green-500 flex-1" value={newMarket.deliveryTime || ''} onChange={e => setNewMarket({...newMarket, deliveryTime: Number(e.target.value)})} />
+                            <input type="number" step="0.01" placeholder="Taxa (0 = Grátis)" required className="border p-3 rounded-lg outline-none focus:border-green-500 flex-1" value={newMarket.fee || ''} onChange={e => setNewMarket({...newMarket, fee: Number(e.target.value)})} />
+                          </div>
+                          <div className="md:col-span-2 flex flex-col gap-2">
+                             <span className="text-sm font-semibold text-slate-700">Selecione as Categorias:</span>
+                             <div className="flex flex-wrap gap-2">
+                               {MARKET_CATEGORIES.map(cat => (
+                                 <button
+                                   key={cat}
+                                   type="button"
+                                   onClick={() => toggleCategory(cat)}
+                                   className={`px-4 py-1.5 rounded-full text-sm font-semibold border transition-colors ${
+                                     newMarket.categories.includes(cat) ? 'bg-green-100 text-green-700 border-green-300' : 'bg-slate-50 text-slate-500 border-slate-200 hover:border-green-200'
+                                   }`}
+                                 >
+                                   {cat}
+                                 </button>
+                               ))}
+                             </div>
+                          </div>
+                       </div>
+                       <button type="submit" className="bg-green-600 text-white font-bold py-3 rounded-lg hover:bg-green-700">Salvar Loja</button>
+                    </form>
+                 )}
                  
                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     {adminMarkets.map(market => (
@@ -99,9 +229,21 @@ export default function AdminDashboard() {
                                 <div className="text-sm text-slate-500 flex items-center gap-1.5"><MapPin className="w-3.5 h-3.5"/> {market.cityId}</div>
                              </div>
                           </div>
-                          <div className="flex justify-between items-center">
+                          <div className="flex justify-between items-center mt-2 pt-4 border-t border-slate-50">
                              <span className="text-xs font-bold uppercase tracking-wider text-green-600 bg-green-50 px-2.5 py-1 rounded-md border border-green-200">Ativo</span>
-                             <button className="text-sm font-bold text-slate-600 hover:text-green-600 flex items-center gap-1">Admins <UserPlus className="w-4 h-4"/></button>
+                             <button onClick={async () => {
+                                const email = prompt('Digite o email do parceiro que vai administrar essa loja:');
+                                if(email && updateAdminMarkets) {
+                                   try {
+                                     await setDoc(doc(db, 'markets', market.id), { adminEmails: arrayUnion(email) }, { merge: true });
+                                     alert(`Parceiro ${email} cadastrado com sucesso para administrar ${market.name}`);
+                                     const newAdminMarkets = adminMarkets.map(m => m.id === market.id ? {...m, adminEmails: [...(m.adminEmails||[]), email]} : m);
+                                     updateAdminMarkets(newAdminMarkets);
+                                   } catch(err) {
+                                      alert("Falha de rede ou falta de permissão");
+                                   }
+                                }
+                             }} className="text-sm font-bold text-slate-600 hover:text-green-600 flex items-center gap-1 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-100">Admins <UserPlus className="w-4 h-4"/></button>
                           </div>
                        </div>
                     ))}
@@ -114,17 +256,43 @@ export default function AdminDashboard() {
                  <div className="flex justify-between items-center sm:flex-row flex-col gap-4">
                     <h2 className="text-xl font-bold text-slate-800">Manutenção de Produtos</h2>
                     <div className="flex gap-3 w-full sm:w-auto">
-                       <select className="bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-semibold outline-none w-full sm:w-48 text-slate-700 shadow-sm focus:border-green-500">
+                       <select 
+                         className="bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-semibold outline-none w-full sm:w-48 text-slate-700 shadow-sm focus:border-green-500"
+                         value={selectedMarketId}
+                         onChange={e => setSelectedMarketId(e.target.value)}
+                       >
+                          <option value="" disabled>Selecione a loja...</option>
                           {adminMarkets.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
                        </select>
-                       <button className="bg-green-600 hover:bg-green-700 text-white px-5 py-2.5 rounded-xl font-bold text-sm shadow-md transition-colors flex items-center gap-2 whitespace-nowrap">
-                          <PackagePlus className="w-4 h-4" /> Novo Produto
+                       <button onClick={() => setIsAddingProduct(!isAddingProduct)} className="bg-green-600 hover:bg-green-700 text-white px-5 py-2.5 rounded-xl font-bold text-sm shadow-md transition-colors flex items-center gap-2 whitespace-nowrap">
+                          <PackagePlus className="w-4 h-4" /> {isAddingProduct ? 'Cancelar' : 'Novo Produto'}
                        </button>
                     </div>
                  </div>
+
+                 {isAddingProduct && (
+                    <form onSubmit={handleCreateProduct} className="bg-white border text-left border-green-200 rounded-2xl p-6 shadow-sm flex flex-col gap-4 animate-in fade-in slide-in-from-top-4">
+                       <h3 className="font-bold text-green-800">Cadastrar Produto para {adminMarkets.find(m => m.id === selectedMarketId)?.name}</h3>
+                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <input type="text" placeholder="URL da Imagem (Opcional)" className="border p-3 rounded-lg outline-none focus:border-green-500" value={newProduct.image} onChange={e => setNewProduct({...newProduct, image: e.target.value})} />
+                          <input type="text" placeholder="Nome do Produto" required className="border p-3 rounded-lg outline-none focus:border-green-500" value={newProduct.name} onChange={e => setNewProduct({...newProduct, name: e.target.value})} />
+                          <div className="flex gap-4">
+                            <input type="number" step="0.01" placeholder="Preço Atual" required className="border p-3 rounded-lg outline-none focus:border-green-500 flex-1" value={newProduct.price || ''} onChange={e => setNewProduct({...newProduct, price: Number(e.target.value)})} />
+                            <input type="number" step="0.01" placeholder="Preço Antigo (Opcional)" className="border p-3 rounded-lg outline-none focus:border-green-500 flex-1" value={newProduct.oldPrice || ''} onChange={e => setNewProduct({...newProduct, oldPrice: Number(e.target.value)})} />
+                          </div>
+                          <div className="flex gap-4">
+                             <input type="text" placeholder="Unidade (ex: kg, unidade)" required className="border p-3 rounded-lg outline-none focus:border-green-500 flex-1" value={newProduct.unit} onChange={e => setNewProduct({...newProduct, unit: e.target.value})} />
+                             <input type="text" placeholder="Categoria (ex: Bebidas)" required className="border p-3 rounded-lg outline-none focus:border-green-500 flex-1" value={newProduct.category} onChange={e => setNewProduct({...newProduct, category: e.target.value})} />
+                          </div>
+                          <input type="text" placeholder="Breve descritivo do produto" className="border p-3 rounded-lg outline-none focus:border-green-500 md:col-span-2" value={newProduct.description} onChange={e => setNewProduct({...newProduct, description: e.target.value})} />
+                       </div>
+                       <button type="submit" disabled={!selectedMarketId} className="bg-green-600 text-white font-bold py-3 rounded-lg hover:bg-green-700 disabled:opacity-50">Adicionar ao Catálogo</button>
+                    </form>
+                 )}
+
                  <div className="bg-white border border-slate-200 rounded-2xl p-10 flex flex-col items-center justify-center text-center">
-                     <p className="text-slate-500 max-w-sm mb-4">Selecione uma loja e gerencie seu catálogo adicionando, alterando categorias e editando valores.</p>
-                     <p className="text-sm font-semibold text-green-600 bg-green-50 px-4 py-2 rounded-lg border border-green-100">Área pronta para conexão Firebase Cloud.</p>
+                     <p className="text-slate-500 max-w-sm mb-4">A lista de produtos dinâmicos da loja {adminMarkets.find(m => m.id === selectedMarketId)?.name || 'selecionada'} será renderizada aqui sob o banco de dados.</p>
+                     <p className="text-sm font-semibold text-green-600 bg-green-50 px-4 py-2 rounded-lg border border-green-100">Criação de novos itens habilitada na nuvem.</p>
                  </div>
               </div>
            )}

@@ -67,8 +67,11 @@ export default function Auth() {
   const [isAddingNew, setIsAddingNew] = useState(false);
 
   // Form State
-  const [position, setPosition] = useState<L.LatLng | null>(null);
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
+  
+  const [position, setPosition] = useState<L.LatLng | null>(null);
   const [cep, setCep] = useState('');
   const [street, setStreet] = useState('');
   const [houseNumber, setHouseNumber] = useState('');
@@ -76,19 +79,32 @@ export default function Auth() {
   const [cityState, setCityState] = useState('');
   const [mapCenter, setMapCenter] = useState<L.LatLng | null>(null);
   const [isLoadingCep, setIsLoadingCep] = useState(false);
+  const [loginError, setLoginError] = useState('');
+  const [formError, setFormError] = useState('');
 
-  // Initialize Phone
+  // Initialize Data
   useEffect(() => {
-    if (userProfile && userProfile.phone) {
-      setPhone(userProfile.phone);
+    if (userProfile) {
+      if(userProfile.name) setName(userProfile.name);
+      if(userProfile.email) setEmail(userProfile.email);
+      if(userProfile.phone) setPhone(userProfile.phone);
+    } else if (currentUser) {
+      if(currentUser.displayName) setName(currentUser.displayName);
+      if(currentUser.email) setEmail(currentUser.email);
     }
-  }, [userProfile]);
+  }, [userProfile, currentUser]);
 
   const handleGoogleLogin = async () => {
+    setLoginError('');
     try {
       await signInWithPopup(auth, googleProvider);
-    } catch (error) {
+    } catch (error: any) {
       console.error(error);
+      if (error.code === 'auth/unauthorized-domain') {
+        setLoginError('Este domínio da Vercel não está autorizado no Firebase. Para resolver: acesse o painel do Firebase Console > Authentication > Settings (Configurações) > Authorized domains, e adicione o domínio atual da Vercel na lista.');
+      } else {
+        setLoginError(`Erro ao entrar: ${error.message}`);
+      }
     }
   };
 
@@ -123,7 +139,31 @@ export default function Auth() {
 
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!currentUser || !position) return;
+    setFormError('');
+
+    // --- Validation ---
+    if (!name.trim()) {
+       setFormError('Por favor, informe seu nome completo.');
+       return;
+    }
+    
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!email.trim() || !emailRegex.test(email)) {
+       setFormError('Por favor, informe um endereço de e-mail válido.');
+       return;
+    }
+    
+    if (!phone.replace(/\D/g, '').trim()) {
+       setFormError('Por favor, informe seu telefone com DDD.');
+       return;
+    }
+
+    if (!position || !street || !houseNumber) {
+        setFormError('Por favor, preencha o seu endereço de entrega e selecione a posição no mapa.');
+        return;
+    }
+    
+    if (!currentUser) return;
     
     try {
         const docRef = doc(db, 'users', currentUser.uid, 'private', 'info');
@@ -147,7 +187,8 @@ export default function Auth() {
         const updatedAddresses = [...existingAddresses, newAddress];
         
         await setDoc(docRef, {
-            name: currentUser.displayName || 'Usuário',
+            name,
+            email,
             phone,
             addresses: updatedAddresses,
             activeAddressId: addressId,
@@ -240,10 +281,17 @@ export default function Auth() {
                                     <p className="font-bold text-slate-800">{addr.street}, {addr.houseNumber}</p>
                                     <p className="text-sm text-slate-500">{addr.cityState} • CEP: {addr.cep}</p>
                                     {addr.reference && <p className="text-xs text-slate-400 mt-1">Ref: {addr.reference}</p>}
-                                    {userProfile.activeAddressId === addr.id && (
+                                    {userProfile.activeAddressId === addr.id ? (
                                         <span className="inline-block mt-2 text-xs font-bold uppercase tracking-wider text-green-700 bg-green-200/50 px-2.5 py-1 rounded-md">
                                             Endereço Principal
                                         </span>
+                                    ) : (
+                                        <button 
+                                           onClick={(e) => { e.stopPropagation(); handleSelectAddress(addr.id); }}
+                                           className="inline-block mt-2 text-xs font-bold text-slate-500 hover:text-green-600 hover:bg-slate-100 px-2.5 py-1 rounded-md transition-colors"
+                                        >
+                                           Tornar Principal
+                                        </button>
                                     )}
                                 </div>
                             </div>
@@ -298,6 +346,12 @@ export default function Auth() {
                   <h2 className="text-2xl font-bold text-slate-800">Bem-vindo(a)</h2>
                   <p className="text-slate-500 mt-2">Para sua segurança e praticidade, utilize o login seguro do Google.</p>
                 </div>
+
+                {loginError && (
+                  <div className="bg-red-50 border border-red-200 text-red-700 text-sm font-semibold p-4 rounded-xl text-center">
+                    {loginError}
+                  </div>
+                )}
                 
                 <button 
                   onClick={handleGoogleLogin}
@@ -321,13 +375,34 @@ export default function Auth() {
                 </div>
                 
                 <div className="flex flex-col gap-4">
+                  {formError && (
+                    <div className="bg-red-50 border border-red-200 text-red-700 text-sm font-semibold p-4 rounded-xl">
+                      {formError}
+                    </div>
+                  )}
+
+                  <input 
+                    type="text" 
+                    placeholder="Seu Nome Completo" 
+                    className="w-full bg-slate-50 border border-slate-200 p-3.5 rounded-xl focus:outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500 transition-all font-medium"
+                    value={name}
+                    onChange={e => setName(e.target.value)}
+                  />
+
+                  <input 
+                    type="email" 
+                    placeholder="Seu E-mail" 
+                    className="w-full bg-slate-50 border border-slate-200 p-3.5 rounded-xl focus:outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500 transition-all font-medium"
+                    value={email}
+                    onChange={e => setEmail(e.target.value)}
+                  />
+
                   <input 
                     type="tel" 
                     placeholder="Seu Telefone (WhatsApp)" 
                     className="w-full bg-slate-50 border border-slate-200 p-3.5 rounded-xl focus:outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500 transition-all font-medium"
                     value={phone}
                     onChange={e => setPhone(e.target.value)}
-                    required
                   />
                   
                   <div className="relative">
@@ -339,7 +414,6 @@ export default function Auth() {
                       onChange={e => setCep(e.target.value)}
                       onBlur={handleCepBlur}
                       maxLength={9}
-                      required
                     />
                     <Search className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
                   </div>
@@ -351,7 +425,6 @@ export default function Auth() {
                       className="w-2/3 bg-slate-50 border border-slate-200 p-3.5 rounded-xl focus:outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500 transition-all font-medium"
                       value={street}
                       onChange={e => setStreet(e.target.value)}
-                      required
                     />
                     <input 
                       type="text" 
@@ -359,7 +432,6 @@ export default function Auth() {
                       className="w-1/3 bg-slate-50 border border-slate-200 p-3.5 rounded-xl focus:outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500 transition-all font-medium"
                       value={houseNumber}
                       onChange={e => setHouseNumber(e.target.value)}
-                      required
                     />
                   </div>
                   
@@ -403,7 +475,6 @@ export default function Auth() {
 
                 <button 
                   type="submit" 
-                  disabled={!position || !street || !houseNumber}
                   className="w-full bg-green-600 text-white py-4 rounded-xl font-bold hover:bg-green-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed mt-2 shadow-md"
                 >
                   Salvar Endereço

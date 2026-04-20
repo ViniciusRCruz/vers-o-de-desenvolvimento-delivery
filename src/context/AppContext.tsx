@@ -27,6 +27,7 @@ interface AppContextType {
   // Admin Context
   isSystemAdmin: boolean;
   adminMarkets: any[];
+  updateAdminMarkets: (markets: any[]) => void;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
@@ -36,7 +37,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [userProfile, setUserProfile] = useState<any>(null);
   const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [orders, setOrders] = useState<Order[]>(PAST_ORDERS);
+  const [orders, setOrders] = useState<Order[]>([]);
   
   // Admin States
   const [isSystemAdmin, setIsSystemAdmin] = useState(false);
@@ -83,6 +84,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                  setAdminMarkets(userMarkets);
              }
           }
+
+          // Fetch past orders
+          const q = query(collection(db, 'orders'), where('userId', '==', user.uid));
+          const ordersSnap = await getDocs(q);
+          const fetchedOrders: any[] = [];
+          ordersSnap.forEach(docSnap => {
+            fetchedOrders.push({ id: docSnap.id, ...docSnap.data() });
+          });
+          fetchedOrders.sort((a,b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+          setOrders(fetchedOrders);
+          
         } catch (error) {
           console.error("Error fetching user profile:", error);
         }
@@ -92,6 +104,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         setUserProfile(null);
         setIsSystemAdmin(false);
         setAdminMarkets([]);
+        setOrders([]);
       }
     });
 
@@ -128,10 +141,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     // Optimistic UI update
     setOrders([order, ...orders]);
     
-    // Send to Firebase if logged in
-    if (currentUser) {
-      // Logic for saving omitted here for brevity
-    }
+    // Save to firebase omitted
   };
 
   const cartTotal = cart.reduce((total, item) => total + (item.price * item.qty), 0);
@@ -142,7 +152,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       cart, addToCart, removeFromCart, updateQuantity, clearCart, cartTotal, cartCount,
       isLoggedIn, currentUser, userProfile, login: () => {}, logout: () => firebaseSignOut(auth),
       orders, addOrder, selectedCity, setSelectedCity,
-      isSystemAdmin, adminMarkets
+      isSystemAdmin, adminMarkets, updateAdminMarkets: setAdminMarkets
     }}>
       {children}
     </AppContext.Provider>
