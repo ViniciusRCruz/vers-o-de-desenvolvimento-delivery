@@ -55,22 +55,22 @@ export default function Header() {
         </div>
 
         {isLoggedIn ? (
-          <div className="hidden md:flex items-center gap-4">
+          <div className="flex items-center gap-2 md:gap-4">
             {hasAdminAccess && (
-              <Link to="/admin" className="relative flex items-center gap-2 font-bold text-sm text-slate-700 bg-slate-100 px-3 py-1.5 rounded-lg hover:bg-slate-200 transition-colors">
-                <ShieldAlert className="w-4 h-4 text-slate-500" /> <span>Painel</span>
+              <Link to="/admin" className="relative flex items-center gap-1.5 md:gap-2 font-bold text-xs md:text-sm text-slate-700 bg-slate-100 px-2.5 py-1.5 rounded-lg hover:bg-slate-200 transition-colors">
+                <ShieldAlert className="w-4 h-4 text-slate-500" /> <span className="hidden sm:inline">Painel</span>
               </Link>
             )}
-            <Link to="/history" className="relative flex items-center gap-2 font-semibold text-sm text-slate-700 hover:text-green-600 transition-colors">
-              <ListOrdered className="w-5 h-5" /> <span>Pedidos</span>
+            <Link to="/history" className="relative flex items-center gap-1.5 md:gap-2 font-semibold text-xs md:text-sm text-slate-700 hover:text-green-600 transition-colors">
+              <ListOrdered className="w-4 h-4 md:w-5 md:h-5" /> <span className="hidden sm:inline">Pedidos</span>
             </Link>
-            <Link to="/auth" className="relative flex items-center gap-2 font-semibold text-sm text-slate-700 hover:text-green-600 transition-colors">
-              <User className="w-5 h-5" /> <span>Configurações</span>
+            <Link to="/auth" className="relative flex items-center gap-1.5 md:gap-2 font-semibold text-xs md:text-sm text-slate-700 hover:text-green-600 transition-colors">
+              <User className="w-4 h-4 md:w-5 md:h-5" /> <span className="hidden sm:inline">Perfil</span>
             </Link>
           </div>
         ) : (
-          <Link to="/login" className="hidden md:flex relative items-center gap-2 font-semibold text-sm text-slate-700 hover:text-green-600 transition-colors">
-            <User className="w-5 h-5" /> <span>Entrar</span>
+          <Link to="/login" className="flex relative items-center gap-1.5 md:gap-2 font-semibold text-xs md:text-sm text-slate-700 hover:text-green-600 transition-colors">
+            <User className="w-4 h-4 md:w-5 md:h-5" /> <span className="hidden sm:inline">Entrar</span>
           </Link>
         )}
 

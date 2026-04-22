@@ -95,7 +95,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                  const fetchedMarkets: any[] = [];
                  mktSnap.forEach(d => {
                      const data = d.data();
-                     if (data.adminEmails && data.adminEmails.includes(user.email)) {
+                     if (data.adminEmails && data.adminEmails.some((e: string) => e.toLowerCase() === user.email?.toLowerCase())) {
                          fetchedMarkets.push({ id: d.id, ...data });
                      }
                  });
