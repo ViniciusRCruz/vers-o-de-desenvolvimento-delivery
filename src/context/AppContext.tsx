@@ -70,18 +70,34 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           // Check if System Admin
           if (user.email === 'vinissoba@gmail.com') {
              setIsSystemAdmin(true);
-             // Provide all mock markets for the admin temporarily
-             setAdminMarkets(MARKETS); 
+             const q = query(collection(db, 'markets'), where('isActive', '==', true));
+             const mktSnap = await getDocs(q);
+             const fetchedMarkets: any[] = [];
+             mktSnap.forEach(d => fetchedMarkets.push({ id: d.id, ...d.data() }));
+             setAdminMarkets(fetchedMarkets); 
           } else if (user.email) {
              const sysAdminDoc = await getDoc(doc(db, 'system_admins', user.email));
              if (sysAdminDoc.exists()) {
                  setIsSystemAdmin(true);
-                 setAdminMarkets(MARKETS);
+                 const q = query(collection(db, 'markets'), where('isActive', '==', true));
+                 const mktSnap = await getDocs(q);
+                 const fetchedMarkets: any[] = [];
+                 mktSnap.forEach(d => fetchedMarkets.push({ id: d.id, ...d.data() }));
+                 setAdminMarkets(fetchedMarkets);
              } else {
                  setIsSystemAdmin(false);
-                 // In the future this query runs directly into DB, for now we filter local mock data
-                 const userMarkets = MARKETS.filter(m => m.adminEmails?.includes(user.email || ''));
-                 setAdminMarkets(userMarkets);
+                 // Buscamos todas as lojas ativas (permitido pelas regras) e filtramos no cliente 
+                 // para evitar erro de índice composto (array-contains + ==) no Firebase
+                 const q = query(collection(db, 'markets'), where('isActive', '==', true));
+                 const mktSnap = await getDocs(q);
+                 const fetchedMarkets: any[] = [];
+                 mktSnap.forEach(d => {
+                     const data = d.data();
+                     if (data.adminEmails && data.adminEmails.includes(user.email)) {
+                         fetchedMarkets.push({ id: d.id, ...data });
+                     }
+                 });
+                 setAdminMarkets(fetchedMarkets);
              }
           }
 

@@ -2,10 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Header from '../components/Header';
 import { useAppContext } from '../context/AppContext';
-import { ShieldCheck, Store, MapPin, Search, ArrowRight, UserPlus, PackagePlus } from 'lucide-react';
+import { ShieldCheck, Store, MapPin, Search, ArrowRight, UserPlus, PackagePlus, Trash2, X } from 'lucide-react';
 
 import { auth, db, handleFirestoreError } from '../lib/firebase';
-import { doc, getDoc, collection, setDoc, serverTimestamp, arrayUnion } from 'firebase/firestore';
+import { doc, getDoc, collection, setDoc, serverTimestamp, arrayUnion, deleteDoc } from 'firebase/firestore';
 
 export default function AdminDashboard() {
   const { isLoggedIn, isSystemAdmin, adminMarkets, currentUser, updateAdminMarkets } = useAppContext();
@@ -15,6 +15,10 @@ export default function AdminDashboard() {
   // Market Form State
   const [isAddingMarket, setIsAddingMarket] = useState(false);
   const [newMarket, setNewMarket] = useState({ name: '', cityId: 'São Paulo, SP', img: '🏪', deliveryTime: 45, fee: 0, categories: [] as string[] });
+
+  // Admin Management Modal State
+  const [managingAdminsFor, setManagingAdminsFor] = useState<any | null>(null);
+  const [newAdminEmail, setNewAdminEmail] = useState('');
 
   // Use MARKET_CATEGORIES from HomeList or declare here.
   const MARKET_CATEGORIES = ['Mercado', 'Hortifruti', 'Carnes', 'Bebidas', 'Padaria', 'Limpeza', 'Pet Shop', 'Farmácia', 'Conveniência'];
@@ -101,6 +105,43 @@ export default function AdminDashboard() {
        alert("Erro de permissão ou rede ao criar mercado.");
     }
   }
+
+  const handleDeleteMarket = async (marketId: string) => {
+     if(!isSystemAdmin) return;
+     if(window.confirm('Tem certeza que deseja excluir esta loja? Esta ação não pode ser desfeita.')) {
+        try {
+           await deleteDoc(doc(db, 'markets', marketId));
+           if(updateAdminMarkets) {
+              updateAdminMarkets(adminMarkets.filter(m => m.id !== marketId));
+           }
+        } catch(err) {
+           console.error(err);
+           alert("Erro ao excluir loja.");
+        }
+     }
+  };
+
+  const handleAddAdmin = async (e: React.FormEvent) => {
+     e.preventDefault();
+     if(!managingAdminsFor || !newAdminEmail) return;
+     try {
+         await setDoc(doc(db, 'markets', managingAdminsFor.id), { adminEmails: arrayUnion(newAdminEmail) }, { merge: true });
+         alert(`Parceiro ${newAdminEmail} adicionado com sucesso!`);
+         
+         const updatedMarket = {...managingAdminsFor, adminEmails: [...(managingAdminsFor.adminEmails||[]), newAdminEmail]};
+         
+         if(updateAdminMarkets) {
+             const newAdminMarkets = adminMarkets.map(m => m.id === managingAdminsFor.id ? updatedMarket : m);
+             updateAdminMarkets(newAdminMarkets);
+         }
+         
+         setManagingAdminsFor(updatedMarket);
+         setNewAdminEmail('');
+     } catch(err) {
+         console.error(err);
+         alert("Erro ao adicionar parceiro.");
+     }
+  };
 
   useEffect(() => {
     // Immediate redirect if explicitly unauthorized (fully initialized but lacking permissions)
@@ -230,20 +271,15 @@ export default function AdminDashboard() {
                              </div>
                           </div>
                           <div className="flex justify-between items-center mt-2 pt-4 border-t border-slate-50">
-                             <span className="text-xs font-bold uppercase tracking-wider text-green-600 bg-green-50 px-2.5 py-1 rounded-md border border-green-200">Ativo</span>
-                             <button onClick={async () => {
-                                const email = prompt('Digite o email do parceiro que vai administrar essa loja:');
-                                if(email && updateAdminMarkets) {
-                                   try {
-                                     await setDoc(doc(db, 'markets', market.id), { adminEmails: arrayUnion(email) }, { merge: true });
-                                     alert(`Parceiro ${email} cadastrado com sucesso para administrar ${market.name}`);
-                                     const newAdminMarkets = adminMarkets.map(m => m.id === market.id ? {...m, adminEmails: [...(m.adminEmails||[]), email]} : m);
-                                     updateAdminMarkets(newAdminMarkets);
-                                   } catch(err) {
-                                      alert("Falha de rede ou falta de permissão");
-                                   }
-                                }
-                             }} className="text-sm font-bold text-slate-600 hover:text-green-600 flex items-center gap-1 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-100">Admins <UserPlus className="w-4 h-4"/></button>
+                             <div className="flex gap-2">
+                               <span className="text-xs font-bold uppercase tracking-wider text-green-600 bg-green-50 px-2.5 py-1 rounded-md border border-green-200">Ativo</span>
+                               {isSystemAdmin && (
+                                  <button onClick={() => handleDeleteMarket(market.id)} className="text-red-500 hover:text-red-700 bg-red-50 p-1.5 rounded-md border border-red-100 transition-colors" title="Excluir Loja">
+                                     <Trash2 className="w-4 h-4" />
+                                  </button>
+                               )}
+                             </div>
+                             <button onClick={() => setManagingAdminsFor(market)} className="text-sm font-bold text-slate-600 hover:text-green-600 flex items-center gap-1 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-100">Admins <UserPlus className="w-4 h-4"/></button>
                           </div>
                        </div>
                     ))}
@@ -312,6 +348,41 @@ export default function AdminDashboard() {
               </div>
            )}
         </div>
+
+        {/* Manage Admins Modal */}
+        {managingAdminsFor && (
+           <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+              <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95">
+                 <div className="bg-slate-50 border-b border-slate-100 px-6 py-4 flex justify-between items-center">
+                    <h3 className="font-bold text-lg text-slate-800">Administradores da Loja</h3>
+                    <button onClick={() => setManagingAdminsFor(null)} className="text-slate-400 hover:text-slate-600"><X className="w-5 h-5"/></button>
+                 </div>
+                 <div className="p-6 flex flex-col gap-6">
+                    <div>
+                       <p className="text-sm text-slate-500 mb-2">Loja: <strong>{managingAdminsFor.name}</strong></p>
+                       <div className="flex flex-col gap-2 max-h-40 overflow-y-auto pr-2">
+                          {managingAdminsFor.adminEmails?.length > 0 ? (
+                             managingAdminsFor.adminEmails.map((email: string) => (
+                                <div key={email} className="bg-slate-50 border border-slate-100 px-3 py-2 rounded-lg text-sm text-slate-700 flex items-center gap-2">
+                                   <ShieldCheck className="w-4 h-4 text-green-600"/> {email}
+                                </div>
+                             ))
+                          ) : (
+                             <p className="text-sm text-slate-400 italic">Nenhum administrador adicional.</p>
+                          )}
+                       </div>
+                    </div>
+                    <form onSubmit={handleAddAdmin} className="flex flex-col gap-3">
+                       <label className="text-sm font-semibold text-slate-700">Adicionar novo parceiro</label>
+                       <div className="flex gap-2">
+                          <input type="email" placeholder="E-mail do lojista" required className="flex-1 border border-slate-200 p-2.5 rounded-xl outline-none focus:border-green-500 text-sm" value={newAdminEmail} onChange={e => setNewAdminEmail(e.target.value)} />
+                          <button type="submit" className="bg-green-600 hover:bg-green-700 text-white px-4 py-2.5 rounded-xl font-bold text-sm shadow-sm transition-colors">Adicionar</button>
+                       </div>
+                    </form>
+                 </div>
+              </div>
+           </div>
+        )}
 
       </main>
     </div>
