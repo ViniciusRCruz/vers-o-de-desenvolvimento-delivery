@@ -27,6 +27,7 @@ interface AppContextType {
   // Admin Context
   isSystemAdmin: boolean;
   adminMarkets: any[];
+  isAdminDataLoaded: boolean;
   updateAdminMarkets: (markets: any[]) => void;
 }
 
@@ -42,6 +43,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   // Admin States
   const [isSystemAdmin, setIsSystemAdmin] = useState(false);
   const [adminMarkets, setAdminMarkets] = useState<any[]>([]);
+  const [isAdminDataLoaded, setIsAdminDataLoaded] = useState(false);
 
   const [selectedCity, setSelectedCityState] = useState<City>(() => {
     const saved = localStorage.getItem('app_city');
@@ -100,6 +102,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
                  setAdminMarkets(fetchedMarkets);
              }
           }
+          setIsAdminDataLoaded(true);
 
           // Fetch past orders
           const q = query(collection(db, 'orders'), where('userId', '==', user.uid));
@@ -120,6 +123,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         setUserProfile(null);
         setIsSystemAdmin(false);
         setAdminMarkets([]);
+        setIsAdminDataLoaded(false);
         setOrders([]);
       }
     });
@@ -168,7 +172,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       cart, addToCart, removeFromCart, updateQuantity, clearCart, cartTotal, cartCount,
       isLoggedIn, currentUser, userProfile, login: () => {}, logout: () => firebaseSignOut(auth),
       orders, addOrder, selectedCity, setSelectedCity,
-      isSystemAdmin, adminMarkets, updateAdminMarkets: setAdminMarkets
+      isSystemAdmin, adminMarkets, updateAdminMarkets: setAdminMarkets, isAdminDataLoaded
     }}>
       {children}
     </AppContext.Provider>

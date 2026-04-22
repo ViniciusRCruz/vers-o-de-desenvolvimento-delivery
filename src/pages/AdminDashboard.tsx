@@ -5,10 +5,10 @@ import { useAppContext } from '../context/AppContext';
 import { ShieldCheck, Store, MapPin, UserPlus, PackagePlus, Trash2, X } from 'lucide-react';
 
 import { auth, db } from '../lib/firebase';
-import { doc, setDoc, serverTimestamp, arrayUnion, deleteDoc } from 'firebase/firestore';
+import { doc, setDoc, serverTimestamp, arrayUnion, arrayRemove, deleteDoc } from 'firebase/firestore';
 
 export default function AdminDashboard() {
-  const { isLoggedIn, isSystemAdmin, adminMarkets, currentUser, updateAdminMarkets } = useAppContext();
+  const { isLoggedIn, isSystemAdmin, adminMarkets, currentUser, updateAdminMarkets, isAdminDataLoaded } = useAppContext();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<'markets' | 'products' | 'system'>('markets');
   
@@ -143,12 +143,34 @@ export default function AdminDashboard() {
      }
   };
 
+  const handleRemoveAdmin = async (emailToRemove: string) => {
+     if(!managingAdminsFor) return;
+     if(window.confirm(`Tem certeza que deseja remover o acesso de ${emailToRemove}?`)) {
+         try {
+             await setDoc(doc(db, 'markets', managingAdminsFor.id), { adminEmails: arrayRemove(emailToRemove) }, { merge: true });
+             
+             const updatedEmails = managingAdminsFor.adminEmails.filter((e: string) => e !== emailToRemove);
+             const updatedMarket = {...managingAdminsFor, adminEmails: updatedEmails};
+             
+             if(updateAdminMarkets) {
+                 const newAdminMarkets = adminMarkets.map(m => m.id === managingAdminsFor.id ? updatedMarket : m);
+                 updateAdminMarkets(newAdminMarkets);
+             }
+             
+             setManagingAdminsFor(updatedMarket);
+         } catch(err) {
+             console.error(err);
+             alert("Erro ao remover parceiro.");
+         }
+     }
+  };
+
   useEffect(() => {
     // Immediate redirect if explicitly unauthorized (fully initialized but lacking permissions)
-    if (isLoggedIn && !isSystemAdmin && adminMarkets.length === 0) {
+    if (isLoggedIn && isAdminDataLoaded && !isSystemAdmin && adminMarkets.length === 0) {
       navigate('/');
     }
-  }, [isLoggedIn, isSystemAdmin, adminMarkets, navigate]);
+  }, [isLoggedIn, isAdminDataLoaded, isSystemAdmin, adminMarkets, navigate]);
 
   if (!isLoggedIn) {
      return (
@@ -160,6 +182,14 @@ export default function AdminDashboard() {
   }
 
   // Double-check prevention mechanism from rendering anything during the redirect frame
+  if (!isAdminDataLoaded) {
+      return (
+        <div className="min-h-screen bg-slate-50 flex flex-col font-sans items-center justify-center">
+           <h2 className="text-xl font-bold text-slate-600 animate-pulse">Carregando painel...</h2>
+        </div>
+      );
+  }
+
   if (!isSystemAdmin && adminMarkets.length === 0) {
       return null;
   }
@@ -363,8 +393,18 @@ export default function AdminDashboard() {
                        <div className="flex flex-col gap-2 max-h-40 overflow-y-auto pr-2">
                           {managingAdminsFor.adminEmails && managingAdminsFor.adminEmails.length > 0 ? (
                              managingAdminsFor.adminEmails.map((email: string) => (
-                                <div key={email} className="bg-slate-50 border border-slate-100 px-3 py-2 rounded-lg text-sm text-slate-700 flex items-center gap-2">
-                                   <ShieldCheck className="w-4 h-4 text-green-600"/> {email}
+                                <div key={email} className="bg-slate-50 border border-slate-100 px-3 py-2 rounded-lg text-sm text-slate-700 flex justify-between items-center gap-2">
+                                   <span className="flex items-center gap-2">
+                                      <ShieldCheck className="w-4 h-4 text-green-600"/> {email}
+                                   </span>
+                                   <button 
+                                      type="button" 
+                                      onClick={() => handleRemoveAdmin(email)} 
+                                      className="text-slate-400 hover:text-red-500 transition-colors"
+                                      title="Remover Administrador"
+                                   >
+                                      <Trash2 className="w-4 h-4" />
+                                   </button>
                                 </div>
                              ))
                           ) : (
