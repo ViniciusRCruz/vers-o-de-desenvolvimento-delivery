@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { Product, CartItem, Order, PAST_ORDERS, CITIES, MARKETS } from '../data/mockData';
+import { Product, CartItem, Order, CITIES } from '../data/mockData';
 import { auth, db } from '../lib/firebase';
 import { onAuthStateChanged, signOut as firebaseSignOut } from 'firebase/auth';
 import { doc, getDoc, collection, query, where, getDocs } from 'firebase/firestore';

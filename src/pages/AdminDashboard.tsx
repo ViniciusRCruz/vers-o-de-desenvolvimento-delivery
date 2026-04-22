@@ -2,10 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Header from '../components/Header';
 import { useAppContext } from '../context/AppContext';
-import { ShieldCheck, Store, MapPin, Search, ArrowRight, UserPlus, PackagePlus, Trash2, X } from 'lucide-react';
+import { ShieldCheck, Store, MapPin, UserPlus, PackagePlus, Trash2, X } from 'lucide-react';
 
-import { auth, db, handleFirestoreError } from '../lib/firebase';
-import { doc, getDoc, collection, setDoc, serverTimestamp, arrayUnion, deleteDoc } from 'firebase/firestore';
+import { auth, db } from '../lib/firebase';
+import { doc, setDoc, serverTimestamp, arrayUnion, deleteDoc } from 'firebase/firestore';
 
 export default function AdminDashboard() {
   const { isLoggedIn, isSystemAdmin, adminMarkets, currentUser, updateAdminMarkets } = useAppContext();
@@ -361,7 +361,7 @@ export default function AdminDashboard() {
                     <div>
                        <p className="text-sm text-slate-500 mb-2">Loja: <strong>{managingAdminsFor.name}</strong></p>
                        <div className="flex flex-col gap-2 max-h-40 overflow-y-auto pr-2">
-                          {managingAdminsFor.adminEmails?.length > 0 ? (
+                          {managingAdminsFor.adminEmails && managingAdminsFor.adminEmails.length > 0 ? (
                              managingAdminsFor.adminEmails.map((email: string) => (
                                 <div key={email} className="bg-slate-50 border border-slate-100 px-3 py-2 rounded-lg text-sm text-slate-700 flex items-center gap-2">
                                    <ShieldCheck className="w-4 h-4 text-green-600"/> {email}
