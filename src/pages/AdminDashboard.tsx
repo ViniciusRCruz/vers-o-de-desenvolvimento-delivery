@@ -355,8 +355,17 @@ export default function AdminDashboard() {
              )}
          </div>
          
-         <div className="text-xs text-slate-600">
-             {order.items.map((i: any) => `${i.qty}x ${i.name}`).join(', ')}
+         <div className="flex flex-col gap-1.5 text-xs text-slate-600">
+             {order.items.map((i: any, idx: number) => (
+                <div key={idx} className="flex flex-col">
+                   <span><span className="font-bold">{i.qty}x</span> {i.name}</span>
+                   {i.observation && (
+                      <span className="text-[10px] text-orange-700 bg-orange-100 font-semibold px-2 py-0.5 rounded w-fit mt-0.5 border border-orange-200">
+                         📝 {i.observation}
+                      </span>
+                   )}
+                </div>
+             ))}
          </div>
          
          <div className="flex justify-between items-center pt-2 border-t border-slate-100">
