@@ -113,17 +113,29 @@ export default function StoreView() {
         {/* Content Area */}
         <section className="flex-1 flex flex-col gap-8 min-w-0">
           {/* Hero Banner */}
-          <div className={`h-[240px] md:h-[200px] rounded-3xl relative overflow-hidden text-white flex items-center px-8 md:px-10 shadow-lg ${storeClosed ? 'bg-gradient-to-br from-slate-500 to-slate-700 shadow-slate-500/20' : 'bg-gradient-to-br from-green-400 to-green-600 shadow-green-500/20'}`}>
-            <div className="relative z-10 max-w-sm">
-              <h1 className="text-3xl md:text-4xl font-extrabold mb-3 leading-tight tracking-tight">
-                {market.name}
-              </h1>
-              <p className="text-sm md:text-base opacity-90 font-medium">
-                {storeClosed ? 'Esta loja está fechada no momento.' : 'Os melhores produtos entregues na sua porta.'}
-              </p>
-            </div>
-            <div className="absolute right-[-40px] bottom-[-40px] w[280px] h-[280px] md:w-[320px] md:h-[320px] bg-white/10 rounded-full flex items-center justify-center text-[100px] md:text-[120px] select-none rotate-[-15deg]">
-              {market.img}
+          <div 
+             className={`h-[240px] md:h-[200px] rounded-3xl relative overflow-hidden text-white flex items-center px-8 md:px-10 shadow-lg ${storeClosed ? 'bg-slate-700 shadow-slate-500/20' : 'bg-green-600 shadow-green-500/20'}`}
+             style={market.cover ? { backgroundImage: `url(${market.cover})`, backgroundSize: 'cover', backgroundPosition: 'center' } : {}}
+          >
+            {/* Overlay Escuro para Legibilidade */}
+            <div className="absolute inset-0 bg-black/40 z-0"></div>
+            
+            <div className="relative z-10 flex items-center gap-6">
+              <div className="w-20 h-20 md:w-28 md:h-28 bg-white rounded-2xl shadow-xl overflow-hidden shrink-0 border-2 border-white/20 flex items-center justify-center text-4xl text-slate-300">
+                 {market.img && market.img.startsWith('http') ? (
+                    <img src={market.img} alt={market.name} className="w-full h-full object-cover" />
+                 ) : (
+                    '🏪'
+                 )}
+              </div>
+              <div className="max-w-sm">
+                <h1 className="text-3xl md:text-4xl font-extrabold mb-2 leading-tight tracking-tight drop-shadow-md">
+                  {market.name}
+                </h1>
+                <p className="text-sm md:text-base opacity-95 font-medium drop-shadow-sm">
+                  {storeClosed ? 'Esta loja está fechada no momento.' : 'Os melhores produtos entregues na sua porta.'}
+                </p>
+              </div>
             </div>
           </div>
 

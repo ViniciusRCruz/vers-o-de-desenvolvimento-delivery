@@ -12,10 +12,16 @@ export default function AdminDashboard() {
   
   // Market Form State
   const [isAddingMarket, setIsAddingMarket] = useState(false);
-  const [newMarket, setNewMarket] = useState({ name: '', cityId: 'São Paulo, SP', img: '🏪', deliveryTime: 45, fee: 0, categories: [] as string[] });
+  const MARKET_CATEGORIES = ['Mercado', 'Hortifruti', 'Carnes', 'Bebidas', 'Padaria', 'Limpeza', 'Pet Shop', 'Farmácia', 'Conveniência'];
+  const PREDEFINED_CITIES = ['São Paulo, SP', 'Rio de Janeiro, RJ', 'Belo Horizonte, MG', 'Curitiba, PR', 'Campinas, SP']; // Edite aqui com as cidades reais
+  
+  const [newMarket, setNewMarket] = useState({ name: '', cityId: PREDEFINED_CITIES[0], deliveryTime: 45, fee: 4, categories: [] as string[] });
+  const [logoFile, setLogoFile] = useState<File | null>(null);
+  const [coverFile, setCoverFile] = useState<File | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const [isUpdatingImage, setIsUpdatingImage] = useState<string | null>(null);
   const [managingAdminsFor, setManagingAdminsFor] = useState<any | null>(null);
   const [newAdminEmail, setNewAdminEmail] = useState('');
-  const MARKET_CATEGORIES = ['Mercado', 'Hortifruti', 'Carnes', 'Bebidas', 'Padaria', 'Limpeza', 'Pet Shop', 'Farmácia', 'Conveniência'];
 
   // Product Form State
   const [selectedMarketId, setSelectedMarketId] = useState('');
@@ -120,15 +126,53 @@ export default function AdminDashboard() {
     e.preventDefault();
     if(!isSystemAdmin || !currentUser) return;
     try {
-       const marketStruct = { name: newMarket.name, isActive: true, adminEmails: [currentUser.email] };
+       setIsUploading(true);
+       let logoUrl = '';
+       let coverUrl = '';
+
+       if (logoFile) {
+           const fileExt = logoFile.name.split('.').pop();
+           const fileName = `logo_${Date.now()}.${fileExt}`;
+           const { error: uploadError, data } = await supabase.storage.from('markets').upload(fileName, logoFile);
+           if (!uploadError && data) {
+               logoUrl = supabase.storage.from('markets').getPublicUrl(fileName).data.publicUrl;
+           }
+       }
+
+       if (coverFile) {
+           const fileExt = coverFile.name.split('.').pop();
+           const fileName = `cover_${Date.now()}.${fileExt}`;
+           const { error: uploadError, data } = await supabase.storage.from('markets').upload(fileName, coverFile);
+           if (!uploadError && data) {
+               coverUrl = supabase.storage.from('markets').getPublicUrl(fileName).data.publicUrl;
+           }
+       }
+
+       const marketStruct = { 
+         name: newMarket.name, 
+         isActive: true, 
+         adminEmails: [currentUser.email],
+         cityId: newMarket.cityId,
+         img: logoUrl,
+         cover: coverUrl,
+         deliveryTime: newMarket.deliveryTime,
+         fee: newMarket.fee,
+         categories: newMarket.categories.length > 0 ? newMarket.categories : ['Mercado']
+       };
        const { data, error } = await supabase.from('markets').insert([marketStruct]).select().single();
        if (error) throw error;
-       const createdMarket = { ...data, cityId: newMarket.cityId, img: newMarket.img, deliveryTime: newMarket.deliveryTime, fee: newMarket.fee, rating: 5.0, categories: newMarket.categories.length > 0 ? newMarket.categories : ['Mercado'] };
+       
+       const createdMarket = { ...data, rating: 5.0 };
        if(updateAdminMarkets) updateAdminMarkets([...adminMarkets, createdMarket]);
        setIsAddingMarket(false);
-       setNewMarket({ name: '', cityId: 'São Paulo, SP', img: '🏪', deliveryTime: 45, fee: 0, categories: [] });
-    } catch(err) {
-       alert("Erro ao criar mercado.");
+       setNewMarket({ name: '', cityId: PREDEFINED_CITIES[0], deliveryTime: 45, fee: 4, categories: [] });
+       setLogoFile(null);
+       setCoverFile(null);
+    } catch(err: any) {
+       console.error("Erro ao criar mercado:", err);
+       alert("Erro ao criar mercado. Verifique o console para mais detalhes.");
+    } finally {
+       setIsUploading(false);
     }
   }
 
@@ -138,6 +182,52 @@ export default function AdminDashboard() {
         const { error } = await supabase.from('markets').delete().eq('id', marketId);
         if (!error && updateAdminMarkets) updateAdminMarkets(adminMarkets.filter(m => m.id !== marketId));
      }
+  };
+
+  const handleUpdateMarketImage = async (market: any, type: 'logo' | 'cover', file: File) => {
+      if (!isSystemAdmin) return;
+      setIsUpdatingImage(`${market.id}-${type}`);
+      try {
+           const fileExt = file.name.split('.').pop();
+           const fileName = `${type}_${market.id}_${Date.now()}.${fileExt}`;
+           const { error: uploadError, data } = await supabase.storage.from('markets').upload(fileName, file);
+           if (uploadError) throw uploadError;
+           
+           const newUrl = supabase.storage.from('markets').getPublicUrl(fileName).data.publicUrl;
+           
+           const updatePayload = type === 'logo' ? { img: newUrl } : { cover: newUrl };
+           const { error } = await supabase.from('markets').update(updatePayload).eq('id', market.id);
+           
+           if (!error && updateAdminMarkets) {
+              updateAdminMarkets(adminMarkets.map(m => m.id === market.id ? {...m, ...updatePayload} : m));
+              alert(`${type === 'logo' ? 'Logo' : 'Capa'} atualizada com sucesso!`);
+           } else {
+              throw error;
+           }
+      } catch(err) {
+           console.error(err);
+           alert("Erro ao atualizar imagem.");
+      } finally {
+           setIsUpdatingImage(null);
+      }
+  };
+
+  const handleUpdateMarketFee = async (market: any) => {
+      if (!isSystemAdmin) return;
+      const val = window.prompt(`Definir nova taxa de entrega para [${market.name}]? (Atual: R$ ${Number(market.fee || 0).toFixed(2).replace('.', ',')})`);
+      if (val === null) return;
+      const num = parseFloat(val.replace(',', '.'));
+      if (isNaN(num) || num < 0) {
+         alert("Valor inválido.");
+         return;
+      }
+      const { error } = await supabase.from('markets').update({ fee: num }).eq('id', market.id);
+      if (!error && updateAdminMarkets) {
+         updateAdminMarkets(adminMarkets.map(m => m.id === market.id ? {...m, fee: num} : m));
+         alert("Taxa atualizada com sucesso!");
+      } else {
+         alert("Erro ao atualizar taxa.");
+      }
   };
 
   const handleDeleteProduct = async (productId: string) => {
@@ -312,7 +402,9 @@ export default function AdminDashboard() {
                      <div key={market.id} className="bg-white rounded-2xl p-6 border border-slate-100 shadow-sm flex flex-col gap-4">
                         <div className="flex justify-between items-start">
                            <div className="flex items-center gap-4">
-                              <div className="w-14 h-14 bg-slate-50 rounded-2xl flex items-center justify-center text-3xl shadow-inner">{market.img || '🏪'}</div>
+                              <div className="w-14 h-14 bg-slate-50 rounded-2xl flex items-center justify-center text-3xl shadow-inner overflow-hidden border border-slate-100 shrink-0">
+                                 {market.img ? <img src={market.img} alt={market.name} className="w-full h-full object-cover" /> : <Store className="w-6 h-6 text-slate-400" />}
+                              </div>
                               <div>
                                  <h3 className="font-bold text-lg text-slate-800">{market.name}</h3>
                                  <p className="text-sm text-slate-500">{market.cityId || 'Cidade não definida'}</p>
@@ -473,6 +565,129 @@ export default function AdminDashboard() {
 
                  </div>
               </div>
+           )}
+
+           {activeTab === 'system' && isSystemAdmin && (
+               <div className="flex flex-col gap-6">
+                  <div className="flex justify-between items-center flex-wrap gap-4">
+                     <h2 className="text-xl font-bold text-slate-800">Gerenciamento de Lojas (Master)</h2>
+                     <button onClick={() => setIsAddingMarket(!isAddingMarket)} className="bg-green-600 text-white px-5 py-2.5 rounded-xl font-bold flex items-center gap-2">
+                        {isAddingMarket ? 'Cancelar' : '+ Nova Loja'}
+                     </button>
+                  </div>
+
+                  {isAddingMarket && (
+                     <form onSubmit={handleCreateMarket} className="bg-white p-6 rounded-2xl border border-green-200 shadow-sm flex flex-col gap-4">
+                        <h3 className="font-bold text-lg">Nova Loja</h3>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                           <input type="text" placeholder="Nome da Loja" required className="border p-2 rounded" value={newMarket.name} onChange={e => setNewMarket({...newMarket, name: e.target.value})} />
+                           
+                           <select required className="border p-2 rounded bg-white text-slate-700 outline-none focus:border-green-500" value={newMarket.cityId} onChange={e => setNewMarket({...newMarket, cityId: e.target.value})}>
+                              <option value="" disabled>Selecione a cidade</option>
+                              {PREDEFINED_CITIES.map(city => <option key={city} value={city}>{city}</option>)}
+                           </select>
+                           
+                           <div className="flex flex-col gap-1">
+                              <label className="text-xs font-bold text-slate-600">Logo (Recomendado: 500x500px, 1:1)</label>
+                              <input type="file" accept="image/png, image/jpeg" className="border p-1.5 rounded text-sm bg-slate-50" onChange={e => setLogoFile(e.target.files?.[0] || null)} />
+                           </div>
+
+                           <div className="flex flex-col gap-1">
+                              <label className="text-xs font-bold text-slate-600">Capa (Recomendado: 1200x400px, 3:1)</label>
+                              <input type="file" accept="image/png, image/jpeg" className="border p-1.5 rounded text-sm bg-slate-50" onChange={e => setCoverFile(e.target.files?.[0] || null)} />
+                           </div>
+
+                           <div className="flex flex-col gap-1">
+                              <label className="text-xs font-bold text-slate-600">Tempo de Entrega (min)</label>
+                              <input type="number" placeholder="Tempo de Entrega (min)" required className="border p-2 rounded" value={newMarket.deliveryTime} onChange={e => setNewMarket({...newMarket, deliveryTime: Number(e.target.value)})} />
+                           </div>
+                           
+                           <div className="flex flex-col gap-1">
+                              <label className="text-xs font-bold text-slate-600">Taxa de Entrega (R$)</label>
+                              <input type="number" step="0.01" placeholder="Taxa de Entrega (R$)" required className="border p-2 rounded" value={newMarket.fee} onChange={e => setNewMarket({...newMarket, fee: Number(e.target.value)})} />
+                           </div>
+                        </div>
+                        <div>
+                           <p className="text-sm font-bold text-slate-600 mb-2">Categorias:</p>
+                           <div className="flex flex-wrap gap-2">
+                              {MARKET_CATEGORIES.map(cat => (
+                                 <button key={cat} type="button" onClick={() => toggleCategory(cat)} className={`px-3 py-1 rounded-full text-xs font-bold ${newMarket.categories.includes(cat) ? 'bg-green-600 text-white' : 'bg-slate-100 text-slate-600'}`}>{cat}</button>
+                              ))}
+                           </div>
+                        </div>
+                        <button type="submit" disabled={isUploading} className="bg-green-600 text-white p-3 rounded-xl font-bold mt-2 disabled:opacity-50">
+                           {isUploading ? 'Enviando Imagens e Salvando...' : 'Salvar Loja'}
+                        </button>
+                     </form>
+                  )}
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                     {adminMarkets.map(market => (
+                        <div key={market.id} className="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm flex flex-col gap-4">
+                           <div className="flex justify-between items-start">
+                              <div className="flex items-center gap-3">
+                                 <div className="bg-slate-50 w-12 h-12 flex items-center justify-center rounded-xl overflow-hidden border border-slate-100 shrink-0">
+                                     {market.img ? <img src={market.img} alt={market.name} className="w-full h-full object-cover" /> : <Store className="w-6 h-6 text-slate-400" />}
+                                 </div>
+                                 <div>
+                                    <h3 className="font-bold text-slate-800">{market.name}</h3>
+                                    <p className="text-xs text-slate-500">{market.cityId || 'Não definida'} • ID: {market.id.split('-')[0]}</p>
+                                 </div>
+                              </div>
+                              <button onClick={() => handleDeleteMarket(market.id)} className="text-red-500 hover:bg-red-50 p-2 rounded-lg transition-colors" title="Excluir Loja">
+                                 <Trash2 className="w-5 h-5" />
+                              </button>
+                           </div>
+
+                           <div className="flex gap-2">
+                              <label className={`text-[11px] border border-slate-200 px-2 py-1.5 rounded-lg font-bold text-slate-600 hover:bg-slate-50 transition-colors cursor-pointer text-center flex-1 ${isUpdatingImage === `${market.id}-logo` ? 'opacity-50 cursor-not-allowed' : ''}`}>
+                                {isUpdatingImage === `${market.id}-logo` ? 'Enviando...' : 'Trocar Logo'}
+                                <input type="file" accept="image/png, image/jpeg" className="hidden" disabled={isUpdatingImage !== null} onChange={(e) => { if(e.target.files?.[0]) handleUpdateMarketImage(market, 'logo', e.target.files[0]) }} />
+                              </label>
+                              <label className={`text-[11px] border border-slate-200 px-2 py-1.5 rounded-lg font-bold text-slate-600 hover:bg-slate-50 transition-colors cursor-pointer text-center flex-1 ${isUpdatingImage === `${market.id}-cover` ? 'opacity-50 cursor-not-allowed' : ''}`}>
+                                {isUpdatingImage === `${market.id}-cover` ? 'Enviando...' : 'Trocar Capa'}
+                                <input type="file" accept="image/png, image/jpeg" className="hidden" disabled={isUpdatingImage !== null} onChange={(e) => { if(e.target.files?.[0]) handleUpdateMarketImage(market, 'cover', e.target.files[0]) }} />
+                              </label>
+                           </div>
+
+                           <div className="flex items-center justify-between bg-slate-50 p-3 rounded-xl border border-slate-100">
+                              <div>
+                                 <p className="text-[10px] uppercase font-bold text-slate-400">Taxa de Entrega</p>
+                                 <p className="font-extrabold text-green-700">R$ {Number(market.fee || 0).toFixed(2).replace('.', ',')}</p>
+                              </div>
+                              <button onClick={() => handleUpdateMarketFee(market)} className="text-xs bg-white border border-slate-200 px-3 py-1.5 rounded-lg font-bold text-slate-600 hover:border-green-500 hover:text-green-600 transition-colors">
+                                 Alterar Taxa
+                              </button>
+                           </div>
+
+                           <div className="border-t border-slate-100 pt-4">
+                              <div className="flex justify-between items-center mb-2">
+                                 <h4 className="font-bold text-sm text-slate-700 flex items-center gap-2"><ShieldCheck className="w-4 h-4"/> Administradores</h4>
+                                 <button onClick={() => setManagingAdminsFor(managingAdminsFor?.id === market.id ? null : market)} className="text-xs text-blue-600 font-bold hover:underline">Gerenciar</button>
+                              </div>
+                              
+                              <div className="flex flex-col gap-2 mt-2">
+                                 {market.adminEmails?.map((email: string) => (
+                                    <div key={email} className="bg-slate-50 px-3 py-2 rounded-lg text-xs text-slate-600 flex justify-between items-center border border-slate-100">
+                                       <span>{email}</span>
+                                       {managingAdminsFor?.id === market.id && (
+                                          <button onClick={() => handleRemoveAdmin(email)} className="text-red-500 hover:text-red-700 font-bold" title="Remover Admin"><X className="w-4 h-4"/></button>
+                                       )}
+                                    </div>
+                                 ))}
+                              </div>
+
+                              {managingAdminsFor?.id === market.id && (
+                                 <form onSubmit={handleAddAdmin} className="mt-3 flex gap-2">
+                                    <input type="email" placeholder="Novo email admin..." required className="flex-1 border border-slate-200 rounded-lg px-3 py-2 text-xs outline-none focus:border-green-500" value={newAdminEmail} onChange={e => setNewAdminEmail(e.target.value)} />
+                                    <button type="submit" className="bg-green-600 text-white px-3 py-2 rounded-lg text-xs font-bold hover:bg-green-700 flex items-center gap-1"><UserPlus className="w-3 h-3"/> Adicionar</button>
+                                 </form>
+                              )}
+                           </div>
+                        </div>
+                     ))}
+                  </div>
+               </div>
            )}
         </div>
 
