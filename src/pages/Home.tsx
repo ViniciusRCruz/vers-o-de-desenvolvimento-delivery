@@ -300,7 +300,6 @@ export default function StoreView() {
           </div>
        </div>
     )}
-    </div>
     </>
   );
 }
