@@ -3,9 +3,10 @@ import { useAppContext } from '../context/AppContext';
 import { useNavigate } from 'react-router-dom';
 import Header from '../components/Header';
 import { MapPin, CreditCard, Banknote, Wallet, ArrowLeft, Trash2, Plus, Minus } from 'lucide-react';
+import { supabase } from '../lib/supabase';
 
 export default function Checkout() {
-  const { cart, cartTotal, removeFromCart, updateQuantity, clearCart, addOrder, userProfile } = useAppContext();
+  const { cart, cartTotal, removeFromCart, updateQuantity, clearCart, addOrder, userProfile, currentUser } = useAppContext();
   const navigate = useNavigate();
   const [paymentMethod, setPaymentMethod] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
@@ -14,24 +15,47 @@ export default function Checkout() {
 
   const handleFinishOrder = async () => {
     if (!paymentMethod) return alert('Selecione uma forma de pagamento');
+    if (!activeAddress) {
+       alert('Nenhum endereço de entrega selecionado. Por favor, complete seu perfil.');
+       return navigate('/auth');
+    }
+    if (!currentUser) {
+       alert('Você precisa estar logado para fazer o pedido.');
+       return navigate('/auth');
+    }
+    
     setIsProcessing(true);
     
-    // Simulate API Call
-    setTimeout(async () => {
-      const newOrder = {
-        id: `ORD-${Math.floor(Math.random() * 10000)}`,
-        date: new Date().toLocaleDateString(),
+    try {
+      const marketId = cart[0]?.marketId;
+      if (!marketId) throw new Error("Erro no carrinho.");
+
+      const { data: marketData } = await supabase.from('markets').select('name').eq('id', marketId).single();
+      const marketName = marketData ? marketData.name : 'Loja Parceira';
+
+      const newOrderStruct = {
+        userId: currentUser.id,
+        marketId: marketId,
+        marketName: marketName,
+        status: 'pending',
         total: cartTotal,
-        status: 'pending' as const,
-        marketName: 'Supermercado (Mix)',
-        items: [...cart],
-        deliveryAddress: activeAddress || null
+        items: cart,
+        deliveryAddress: activeAddress,
+        paymentMethod: paymentMethod
       };
-      await addOrder(newOrder);
+
+      const { data, error } = await supabase.from('orders').insert([newOrderStruct]).select().single();
+      if (error) throw error;
+
+      await addOrder(data);
       clearCart();
       setIsProcessing(false);
-      navigate(`/tracking/${newOrder.id}`);
-    }, 1500);
+      navigate(`/tracking/${data.id}`);
+    } catch (err: any) {
+      console.error(err);
+      alert("Erro ao finalizar pedido: " + (err.message || 'Erro desconhecido.'));
+      setIsProcessing(false);
+    }
   };
 
   if (cart.length === 0) {
@@ -73,7 +97,10 @@ export default function Checkout() {
                 </div>
                 <div className="flex-1">
                   <h3 className="font-semibold text-slate-800">{item.name}</h3>
-                  <p className="text-sm text-slate-500">R$ {item.price.toFixed(2).replace('.', ',')} / {item.unit}</p>
+                  <p className="text-sm text-slate-500">R$ {item.price.toFixed(2).replace('.', ',')} / {item.unit || 'un'}</p>
+                  {item.observation && (
+                     <p className="text-xs text-orange-600 bg-orange-50 px-2 py-1 rounded mt-1 inline-block">📝 {item.observation}</p>
+                  )}
                 </div>
                 <div className="flex items-center gap-3">
                   <div className="flex items-center bg-slate-100 rounded-lg">

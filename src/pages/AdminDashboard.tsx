@@ -1,27 +1,86 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Header from '../components/Header';
 import { useAppContext } from '../context/AppContext';
-import { ShieldCheck, Store, MapPin, UserPlus, PackagePlus, Trash2, X } from 'lucide-react';
-
-import { auth, db } from '../lib/firebase';
-import { doc, setDoc, serverTimestamp, arrayUnion, arrayRemove, deleteDoc } from 'firebase/firestore';
+import { ShieldCheck, Store, MapPin, UserPlus, PackagePlus, Trash2, X, Check, MessageCircle, Send } from 'lucide-react';
+import { supabase } from '../lib/supabase';
 
 export default function AdminDashboard() {
   const { isLoggedIn, isSystemAdmin, adminMarkets, currentUser, updateAdminMarkets, isAdminDataLoaded } = useAppContext();
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState<'markets' | 'products' | 'system'>('markets');
+  const [activeTab, setActiveTab] = useState<'markets' | 'products' | 'orders' | 'system'>('markets');
   
   // Market Form State
   const [isAddingMarket, setIsAddingMarket] = useState(false);
   const [newMarket, setNewMarket] = useState({ name: '', cityId: 'São Paulo, SP', img: '🏪', deliveryTime: 45, fee: 0, categories: [] as string[] });
-
-  // Admin Management Modal State
   const [managingAdminsFor, setManagingAdminsFor] = useState<any | null>(null);
   const [newAdminEmail, setNewAdminEmail] = useState('');
-
-  // Use MARKET_CATEGORIES from HomeList or declare here.
   const MARKET_CATEGORIES = ['Mercado', 'Hortifruti', 'Carnes', 'Bebidas', 'Padaria', 'Limpeza', 'Pet Shop', 'Farmácia', 'Conveniência'];
+
+  // Product Form State
+  const [selectedMarketId, setSelectedMarketId] = useState('');
+  const [isAddingProduct, setIsAddingProduct] = useState(false);
+  const [newProduct, setNewProduct] = useState({ name: '', price: '', description: '', category: '', newCategory: '', image: '' });
+  const [existingCategories, setExistingCategories] = useState<string[]>([]);
+  const [isCreatingCategory, setIsCreatingCategory] = useState(false);
+  const [storeProducts, setStoreProducts] = useState<any[]>([]);
+  
+  // Orders State
+  const [storeOrders, setStoreOrders] = useState<any[]>([]);
+  const [activeChatOrder, setActiveChatOrder] = useState<any | null>(null);
+  const [chatMessage, setChatMessage] = useState('');
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  useEffect(() => {
+    // Inicializa o som de notificação
+    audioRef.current = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
+  }, []);
+
+  useEffect(() => {
+    if(adminMarkets.length > 0 && !selectedMarketId) {
+      setSelectedMarketId(adminMarkets[0].id);
+    }
+  }, [adminMarkets]);
+
+  // Fetch store data and listen to orders
+  useEffect(() => {
+    if (!selectedMarketId) return;
+    
+    const fetchStoreData = async () => {
+       const { data: prods } = await supabase.from('products').select('*').eq('marketId', selectedMarketId);
+       if (prods) {
+          setStoreProducts(prods);
+          const uniqueCats = Array.from(new Set(prods.map((d: any) => d.category).filter(Boolean)));
+          setExistingCategories(uniqueCats as string[]);
+       }
+       
+       const { data: ords } = await supabase.from('orders').select('*').eq('marketId', selectedMarketId).order('created_at', { ascending: false });
+       if (ords) {
+          setStoreOrders(ords);
+       }
+    };
+    fetchStoreData();
+
+    // Inscrever-se para novos pedidos em tempo real (Notificação Sonora)
+    const channel = supabase.channel(`admin_orders_${selectedMarketId}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders', filter: `marketId=eq.${selectedMarketId}` }, (payload) => {
+         if (payload.eventType === 'INSERT') {
+             // Toca o som de notificação
+             if (audioRef.current) {
+                 audioRef.current.play().catch(e => console.log('Autoplay blocked:', e));
+             }
+             setStoreOrders(prev => [payload.new, ...prev]);
+         } else if (payload.eventType === 'UPDATE') {
+             setStoreOrders(prev => prev.map(o => o.id === payload.new.id ? payload.new : o));
+             if (activeChatOrder && activeChatOrder.id === payload.new.id) {
+                 setActiveChatOrder(payload.new);
+             }
+         }
+      })
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [selectedMarketId, activeChatOrder]);
 
   const toggleCategory = (cat: string) => {
      setNewMarket(prev => {
@@ -33,43 +92,26 @@ export default function AdminDashboard() {
      });
   };
 
-  // Product Form State
-  const [selectedMarketId, setSelectedMarketId] = useState('');
-  const [isAddingProduct, setIsAddingProduct] = useState(false);
-  const [newProduct, setNewProduct] = useState({ name: '', price: 0, oldPrice: 0, unit: 'unidade', description: '', category: 'Alimentos', image: 'https://picsum.photos/seed/fruit/200/200' });
-
-  // Update selected store to be always the first one when markets load
-  useEffect(() => {
-    if(adminMarkets.length > 0 && !selectedMarketId) {
-      setSelectedMarketId(adminMarkets[0].id);
-    }
-  }, [adminMarkets]);
-
   const handleCreateProduct = async (e: React.FormEvent) => {
     e.preventDefault();
     if(!selectedMarketId || !currentUser) return;
     
+    const finalCategory = isCreatingCategory ? newProduct.newCategory.trim() : newProduct.category;
+    if (!finalCategory) { return alert("Por favor, selecione ou digite uma categoria."); }
+    
     try {
-       const productId = `prod_${Date.now()}`;
-       const docRef = doc(db, 'products', productId);
-       const prodStruct = {
-          name: newProduct.name,
-          price: newProduct.price,
-          oldPrice: newProduct.oldPrice || null,
-          unit: newProduct.unit,
-          description: newProduct.description,
-          category: newProduct.category,
-          image: newProduct.image,
-          marketId: selectedMarketId,
-          isActive: true,
-          createdAt: serverTimestamp()
-       };
-       await setDoc(docRef, prodStruct);
-       alert(`Produto [${newProduct.name}] salvo no banco!`);
+       const prodStruct = { name: newProduct.name, price: Number(newProduct.price), description: newProduct.description, category: finalCategory, image: newProduct.image, marketId: selectedMarketId, isActive: true };
+       const { error } = await supabase.from('products').insert([prodStruct]);
+       if (error) throw error;
+       
+       alert(`Produto salvo com sucesso!`);
+       const createdProduct = { ...prodStruct, id: Math.random().toString() };
+       setStoreProducts([...storeProducts, createdProduct]);
        setIsAddingProduct(false);
-       setNewProduct({ name: '', price: 0, oldPrice: 0, unit: 'unidade', description: '', category: 'Alimentos', image: 'https://picsum.photos/seed/fruit/200/200' });
-    } catch(err) {
-       console.error("Failed creating product", err);
+       setNewProduct({ name: '', price: '', description: '', category: finalCategory, newCategory: '', image: '' });
+       setIsCreatingCategory(false);
+       if (!existingCategories.includes(finalCategory)) setExistingCategories([...existingCategories, finalCategory]);
+    } catch(err: any) {
        alert("Erro ao salvar produto.");
     }
   }
@@ -77,349 +119,390 @@ export default function AdminDashboard() {
   const handleCreateMarket = async (e: React.FormEvent) => {
     e.preventDefault();
     if(!isSystemAdmin || !currentUser) return;
-    
     try {
-       const marketId = `mkt_${Date.now()}`;
-       const docRef = doc(db, 'markets', marketId);
-       const marketStruct = {
-          name: newMarket.name,
-          cityId: newMarket.cityId,
-          img: newMarket.img,
-          deliveryTime: newMarket.deliveryTime,
-          fee: newMarket.fee,
-          rating: 5.0,
-          categories: newMarket.categories.length > 0 ? newMarket.categories : ['Mercado'], // Fallback se não marcar nada
-          isActive: true,
-          adminEmails: [currentUser.email],
-          createdAt: serverTimestamp()
-       };
-       await setDoc(docRef, marketStruct);
-       // Refresh via context or local state
-       if(updateAdminMarkets) {
-         updateAdminMarkets([...adminMarkets, { id: marketId, ...marketStruct }]);
-       }
+       const marketStruct = { name: newMarket.name, isActive: true, adminEmails: [currentUser.email] };
+       const { data, error } = await supabase.from('markets').insert([marketStruct]).select().single();
+       if (error) throw error;
+       const createdMarket = { ...data, cityId: newMarket.cityId, img: newMarket.img, deliveryTime: newMarket.deliveryTime, fee: newMarket.fee, rating: 5.0, categories: newMarket.categories.length > 0 ? newMarket.categories : ['Mercado'] };
+       if(updateAdminMarkets) updateAdminMarkets([...adminMarkets, createdMarket]);
        setIsAddingMarket(false);
        setNewMarket({ name: '', cityId: 'São Paulo, SP', img: '🏪', deliveryTime: 45, fee: 0, categories: [] });
     } catch(err) {
-       console.error("Failed creating market", err);
-       alert("Erro de permissão ou rede ao criar mercado.");
+       alert("Erro ao criar mercado.");
     }
   }
 
   const handleDeleteMarket = async (marketId: string) => {
      if(!isSystemAdmin) return;
-     if(window.confirm('Tem certeza que deseja excluir esta loja? Esta ação não pode ser desfeita.')) {
-        try {
-           await deleteDoc(doc(db, 'markets', marketId));
-           if(updateAdminMarkets) {
-              updateAdminMarkets(adminMarkets.filter(m => m.id !== marketId));
-           }
-        } catch(err) {
-           console.error(err);
-           alert("Erro ao excluir loja.");
-        }
+     if(window.confirm('Excluir esta loja?')) {
+        const { error } = await supabase.from('markets').delete().eq('id', marketId);
+        if (!error && updateAdminMarkets) updateAdminMarkets(adminMarkets.filter(m => m.id !== marketId));
      }
+  };
+
+  const handleDeleteProduct = async (productId: string) => {
+     if(window.confirm('Excluir este produto?')) {
+        const { error } = await supabase.from('products').delete().eq('id', productId);
+        if (!error) setStoreProducts(storeProducts.filter(p => p.id !== productId));
+     }
+  };
+
+  const handleSetPromotion = async (p: any) => {
+      const val = window.prompt(`Definir preço promocional da Loja para [${p.name}]? (Preço original: R$ ${p.price}). Deixe em branco para remover a promoção.`);
+      if (val === null) return;
+      const num = parseFloat(val.replace(',', '.'));
+      const promo = isNaN(num) ? null : num;
+      const { error } = await supabase.from('products').update({ promotionalPrice: promo }).eq('id', p.id);
+      if (!error) {
+         setStoreProducts(storeProducts.map(prod => prod.id === p.id ? {...prod, promotionalPrice: promo} : prod));
+         alert("Promoção atualizada com sucesso!");
+      } else {
+         alert("Erro ao atualizar promoção.");
+      }
+  };
+
+  const handleSetPlatformDiscount = async (p: any) => {
+      if (!isSystemAdmin) return;
+      const val = window.prompt(`[MASTER] Definir desconto subsidiado pela Plataforma para [${p.name}]? (Ex: 5.00 será abatido do valor final, mas a loja recebe integral). Deixe em branco para remover.`);
+      if (val === null) return;
+      const num = parseFloat(val.replace(',', '.'));
+      const promo = isNaN(num) ? null : num;
+      const { error } = await supabase.from('products').update({ platformDiscount: promo }).eq('id', p.id);
+      if (!error) {
+         setStoreProducts(storeProducts.map(prod => prod.id === p.id ? {...prod, platformDiscount: promo} : prod));
+         alert("Desconto da plataforma atualizado com sucesso!");
+      } else {
+         alert("Erro ao atualizar desconto da plataforma.");
+      }
+  };
+
+  const handleUpdateOrderStatus = async (orderId: string, newStatus: string) => {
+      try {
+         const { error } = await supabase.from('orders').update({ status: newStatus }).eq('id', orderId);
+         if (error) throw error;
+         // Realtime vai atualizar o estado local
+      } catch (err) {
+         alert("Erro ao atualizar status.");
+      }
+  };
+
+  const handleSendChatMessage = async (e: React.FormEvent) => {
+      e.preventDefault();
+      if (!activeChatOrder || !chatMessage.trim()) return;
+      
+      const newMsg = { sender: 'store', text: chatMessage.trim(), time: new Date().toISOString() };
+      const updatedChat = [...(activeChatOrder.chat || []), newMsg];
+      
+      try {
+          const { error } = await supabase.from('orders').update({ chat: updatedChat }).eq('id', activeChatOrder.id);
+          if (error) throw error;
+          setChatMessage('');
+      } catch (err) {
+          alert("Erro ao enviar mensagem.");
+      }
   };
 
   const handleAddAdmin = async (e: React.FormEvent) => {
-     e.preventDefault();
-     if(!managingAdminsFor || !newAdminEmail) return;
-     try {
-         await setDoc(doc(db, 'markets', managingAdminsFor.id), { adminEmails: arrayUnion(newAdminEmail) }, { merge: true });
-         alert(`Parceiro ${newAdminEmail} adicionado com sucesso!`);
-         
-         const updatedMarket = {...managingAdminsFor, adminEmails: [...(managingAdminsFor.adminEmails||[]), newAdminEmail]};
-         
-         if(updateAdminMarkets) {
-             const newAdminMarkets = adminMarkets.map(m => m.id === managingAdminsFor.id ? updatedMarket : m);
-             updateAdminMarkets(newAdminMarkets);
-         }
-         
-         setManagingAdminsFor(updatedMarket);
-         setNewAdminEmail('');
-     } catch(err) {
-         console.error(err);
-         alert("Erro ao adicionar parceiro.");
-     }
+      // Omitted to keep it short, same as before
+      e.preventDefault();
+      if(!managingAdminsFor || !newAdminEmail) return;
+      const updatedEmails = [...(managingAdminsFor.adminEmails || []), newAdminEmail];
+      const { error } = await supabase.from('markets').update({ adminEmails: updatedEmails }).eq('id', managingAdminsFor.id);
+      if (!error) {
+          const updatedMarket = {...managingAdminsFor, adminEmails: updatedEmails};
+          if(updateAdminMarkets) updateAdminMarkets(adminMarkets.map(m => m.id === managingAdminsFor.id ? updatedMarket : m));
+          setManagingAdminsFor(updatedMarket);
+          setNewAdminEmail('');
+      }
   };
 
   const handleRemoveAdmin = async (emailToRemove: string) => {
-     if(!managingAdminsFor) return;
-     if(window.confirm(`Tem certeza que deseja remover o acesso de ${emailToRemove}?`)) {
-         try {
-             await setDoc(doc(db, 'markets', managingAdminsFor.id), { adminEmails: arrayRemove(emailToRemove) }, { merge: true });
-             
-             const updatedEmails = managingAdminsFor.adminEmails.filter((e: string) => e !== emailToRemove);
-             const updatedMarket = {...managingAdminsFor, adminEmails: updatedEmails};
-             
-             if(updateAdminMarkets) {
-                 const newAdminMarkets = adminMarkets.map(m => m.id === managingAdminsFor.id ? updatedMarket : m);
-                 updateAdminMarkets(newAdminMarkets);
-             }
-             
-             setManagingAdminsFor(updatedMarket);
-         } catch(err) {
-             console.error(err);
-             alert("Erro ao remover parceiro.");
-         }
-     }
+      if(!managingAdminsFor) return;
+      const updatedEmails = managingAdminsFor.adminEmails.filter((e: string) => e !== emailToRemove);
+      const { error } = await supabase.from('markets').update({ adminEmails: updatedEmails }).eq('id', managingAdminsFor.id);
+      if (!error) {
+          const updatedMarket = {...managingAdminsFor, adminEmails: updatedEmails};
+          if(updateAdminMarkets) updateAdminMarkets(adminMarkets.map(m => m.id === managingAdminsFor.id ? updatedMarket : m));
+          setManagingAdminsFor(updatedMarket);
+      }
   };
 
   useEffect(() => {
-    // Immediate redirect if explicitly unauthorized (fully initialized but lacking permissions)
-    if (isLoggedIn && isAdminDataLoaded && !isSystemAdmin && adminMarkets.length === 0) {
-      navigate('/');
-    }
+    if (isLoggedIn && isAdminDataLoaded && !isSystemAdmin && adminMarkets.length === 0) navigate('/');
   }, [isLoggedIn, isAdminDataLoaded, isSystemAdmin, adminMarkets, navigate]);
 
-  if (!isLoggedIn) {
-     return (
-       <div className="min-h-screen bg-slate-50 flex flex-col font-sans items-center justify-center">
-          <h2 className="text-2xl font-bold">Faça login para acessar o painel</h2>
-          <button onClick={() => navigate('/auth')} className="mt-4 px-6 py-2 bg-green-600 text-white rounded-lg font-bold">Ir para Login</button>
-       </div>
-     )
-  }
+  if (!isLoggedIn) return (<div className="min-h-screen bg-slate-50 flex items-center justify-center"><button onClick={() => navigate('/auth')} className="bg-green-600 text-white p-3 rounded">Login</button></div>);
+  if (!isAdminDataLoaded) return (<div className="min-h-screen bg-slate-50 flex items-center justify-center">Carregando...</div>);
+  if (!isSystemAdmin && adminMarkets.length === 0) return null;
 
-  // Double-check prevention mechanism from rendering anything during the redirect frame
-  if (!isAdminDataLoaded) {
-      return (
-        <div className="min-h-screen bg-slate-50 flex flex-col font-sans items-center justify-center">
-           <h2 className="text-xl font-bold text-slate-600 animate-pulse">Carregando painel...</h2>
-        </div>
-      );
-  }
+  // Organizando pedidos para o Kanban
+  const newOrders = storeOrders.filter(o => o.status === 'pending');
+  const prepOrders = storeOrders.filter(o => o.status === 'prep');
+  const deliveryOrders = storeOrders.filter(o => o.status === 'delivery');
+  const finishedOrders = storeOrders.filter(o => o.status === 'finished' || o.status === 'canceled');
 
-  if (!isSystemAdmin && adminMarkets.length === 0) {
-      return null;
-  }
+  const renderOrderCard = (order: any, actions: React.ReactNode) => (
+      <div key={order.id} className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm flex flex-col gap-3">
+         <div className="flex justify-between items-start">
+             <div>
+                <span className="font-bold text-slate-800 text-sm">#{order.id.split('-')[0]}</span>
+                <div className="text-xs text-slate-400">{new Date(order.created_at).toLocaleTimeString('pt-BR')}</div>
+             </div>
+             <button onClick={() => setActiveChatOrder(order)} className="text-slate-400 hover:text-blue-500 relative">
+                 <MessageCircle className="w-5 h-5" />
+                 {order.chat && order.chat.length > 0 && order.chat[order.chat.length-1].sender === 'customer' && (
+                     <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white"></span>
+                 )}
+             </button>
+         </div>
+         
+         <div className="text-xs text-slate-600">
+             {order.items.map((i: any) => `${i.qty}x ${i.name}`).join(', ')}
+         </div>
+         
+         <div className="flex justify-between items-center pt-2 border-t border-slate-100">
+             <span className="font-extrabold text-green-700 text-sm">R$ {Number(order.total).toFixed(2).replace('.', ',')}</span>
+             <span className="text-xs font-semibold px-2 py-1 bg-slate-100 rounded-md text-slate-600 uppercase">{order.paymentMethod === 'pix' ? 'PIX' : order.paymentMethod === 'card' ? 'Cartão' : 'Dinheiro'}</span>
+         </div>
+         
+         {order.deliveryAddress && (
+             <div className="text-xs text-slate-500 bg-slate-50 p-2 rounded flex gap-2">
+                 <MapPin className="w-3 h-3 shrink-0 mt-0.5" />
+                 <span>{order.deliveryAddress.street}, {order.deliveryAddress.houseNumber}</span>
+             </div>
+         )}
+         
+         <div className="flex gap-2 mt-1">
+             {actions}
+         </div>
+      </div>
+  );
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col font-sans">
       <Header />
       
-      <main className="flex-1 max-w-7xl w-full mx-auto p-6 md:p-10 flex flex-col gap-8">
+      <main className="flex-1 max-w-7xl w-full mx-auto p-4 md:p-10 flex flex-col gap-6">
         
         {/* Banner */}
-        <div className="bg-slate-800 rounded-3xl p-8 md:p-10 text-white flex justify-between items-center shadow-lg">
+        <div className="bg-slate-800 rounded-3xl p-6 md:p-8 text-white flex justify-between items-center shadow-lg">
            <div>
-              <span className="bg-green-500/20 text-green-300 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider mb-3 inline-block border border-green-500/30">
+              <span className="bg-green-500/20 text-green-300 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider mb-2 inline-block border border-green-500/30">
                 {isSystemAdmin ? 'MASTER ADMIN' : 'LOJISTA'}
               </span>
-              <h1 className="text-3xl font-extrabold flex items-center gap-3">Painel de Gestão</h1>
-              <p className="text-slate-400 mt-2 text-sm">{currentUser?.email}</p>
-           </div>
-           <div className="hidden md:flex text-6xl opacity-80">
-              🛠️
+              <h1 className="text-2xl md:text-3xl font-extrabold">Painel de Gestão</h1>
            </div>
         </div>
 
         {/* Tab Switcher */}
         <div className="flex gap-2 overflow-x-auto border-b border-slate-200 pb-px">
-          <button 
-             onClick={() => setActiveTab('markets')}
-             className={`px-6 py-3 font-bold text-sm transition-colors border-b-2 whitespace-nowrap ${activeTab === 'markets' ? 'border-green-600 text-green-600' : 'border-transparent text-slate-500 hover:text-slate-800'}`}
-          >
-             Meus Estabelecimentos
+          <button onClick={() => setActiveTab('markets')} className={`px-4 py-3 font-bold text-sm transition-colors border-b-2 whitespace-nowrap ${activeTab === 'markets' ? 'border-green-600 text-green-600' : 'border-transparent text-slate-500'}`}>Estabelecimentos</button>
+          <button onClick={() => setActiveTab('products')} className={`px-4 py-3 font-bold text-sm transition-colors border-b-2 whitespace-nowrap ${activeTab === 'products' ? 'border-green-600 text-green-600' : 'border-transparent text-slate-500'}`}>Catálogo</button>
+          <button onClick={() => setActiveTab('orders')} className={`px-4 py-3 font-bold text-sm transition-colors border-b-2 whitespace-nowrap ${activeTab === 'orders' ? 'border-green-600 text-green-600' : 'border-transparent text-slate-500'}`}>
+             Pedidos {newOrders.length > 0 && <span className="bg-red-500 text-white rounded-full px-2 py-0.5 ml-1 text-xs">{newOrders.length}</span>}
           </button>
-          <button 
-             onClick={() => setActiveTab('products')}
-             className={`px-6 py-3 font-bold text-sm transition-colors border-b-2 whitespace-nowrap ${activeTab === 'products' ? 'border-green-600 text-green-600' : 'border-transparent text-slate-500 hover:text-slate-800'}`}
-          >
-             Catálogo de Produtos
-          </button>
-          {isSystemAdmin && (
-             <button 
-                onClick={() => setActiveTab('system')}
-                className={`px-6 py-3 font-bold text-sm transition-colors border-b-2 whitespace-nowrap ${activeTab === 'system' ? 'border-green-600 text-green-600' : 'border-transparent text-slate-500 hover:text-slate-800'}`}
-             >
-                Gestão Master
-             </button>
-          )}
+          {isSystemAdmin && <button onClick={() => setActiveTab('system')} className={`px-4 py-3 font-bold text-sm transition-colors border-b-2 whitespace-nowrap ${activeTab === 'system' ? 'border-green-600 text-green-600' : 'border-transparent text-slate-500'}`}>Master</button>}
         </div>
 
         {/* Tab Contents */}
         <div className="flex flex-col gap-6">
            {activeTab === 'markets' && (
-              <div className="flex flex-col gap-6">
-                 <div className="flex justify-between items-center flex-wrap gap-4">
-                    <h2 className="text-xl font-bold text-slate-800">Lojas Gerenciadas ({adminMarkets.length})</h2>
-                    {isSystemAdmin && (
-                       <button 
-                         onClick={() => setIsAddingMarket(!isAddingMarket)}
-                         className="bg-green-600 hover:bg-green-700 text-white px-5 py-2.5 rounded-xl font-bold text-sm shadow-md transition-colors flex items-center gap-2"
-                       >
-                          <Store className="w-4 h-4" /> {isAddingMarket ? 'Cancelar' : 'Nova Loja'}
-                       </button>
-                    )}
-                 </div>
-
-                 {isAddingMarket && isSystemAdmin && (
-                    <form onSubmit={handleCreateMarket} className="bg-white border text-left border-green-200 rounded-2xl p-6 shadow-sm flex flex-col gap-4 animate-in fade-in slide-in-from-top-4">
-                       <h3 className="font-bold text-green-800">Cadastrar Novo Estabelecimento</h3>
-                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          <input type="text" placeholder="Nome da Loja" required className="border p-3 rounded-lg outline-none focus:border-green-500" value={newMarket.name} onChange={e => setNewMarket({...newMarket, name: e.target.value})} />
-                          <select className="border p-3 rounded-lg outline-none focus:border-green-500" value={newMarket.cityId} onChange={e => setNewMarket({...newMarket, cityId: e.target.value})}>
-                            {['São Paulo, SP', 'Cascavel, PR'].map(c => <option key={c} value={c}>{c}</option>)}
-                          </select>
-                          <div className="flex gap-4">
-                            <input type="number" placeholder="Tempo Médio (min)" required className="border p-3 rounded-lg outline-none focus:border-green-500 flex-1" value={newMarket.deliveryTime || ''} onChange={e => setNewMarket({...newMarket, deliveryTime: Number(e.target.value)})} />
-                            <input type="number" step="0.01" placeholder="Taxa (0 = Grátis)" required className="border p-3 rounded-lg outline-none focus:border-green-500 flex-1" value={newMarket.fee || ''} onChange={e => setNewMarket({...newMarket, fee: Number(e.target.value)})} />
-                          </div>
-                          <div className="md:col-span-2 flex flex-col gap-2">
-                             <span className="text-sm font-semibold text-slate-700">Selecione as Categorias:</span>
-                             <div className="flex flex-wrap gap-2">
-                               {MARKET_CATEGORIES.map(cat => (
-                                 <button
-                                   key={cat}
-                                   type="button"
-                                   onClick={() => toggleCategory(cat)}
-                                   className={`px-4 py-1.5 rounded-full text-sm font-semibold border transition-colors ${
-                                     newMarket.categories.includes(cat) ? 'bg-green-100 text-green-700 border-green-300' : 'bg-slate-50 text-slate-500 border-slate-200 hover:border-green-200'
-                                   }`}
-                                 >
-                                   {cat}
-                                 </button>
-                               ))}
-                             </div>
-                          </div>
-                       </div>
-                       <button type="submit" className="bg-green-600 text-white font-bold py-3 rounded-lg hover:bg-green-700">Salvar Loja</button>
-                    </form>
-                 )}
-                 
-                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {adminMarkets.map(market => (
-                       <div key={market.id} className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex flex-col gap-4 relative group">
-                          <div className="flex gap-4 items-center border-b border-slate-100 pb-4">
-                             <div className="w-14 h-14 bg-slate-50 rounded-xl flex items-center justify-center text-3xl">
-                               {market.img}
-                             </div>
-                             <div>
-                                <h3 className="font-bold text-lg text-slate-800">{market.name}</h3>
-                                <div className="text-sm text-slate-500 flex items-center gap-1.5"><MapPin className="w-3.5 h-3.5"/> {market.cityId}</div>
-                             </div>
-                          </div>
-                          <div className="flex justify-between items-center mt-2 pt-4 border-t border-slate-50">
-                             <div className="flex gap-2">
-                               <span className="text-xs font-bold uppercase tracking-wider text-green-600 bg-green-50 px-2.5 py-1 rounded-md border border-green-200">Ativo</span>
-                               {isSystemAdmin && (
-                                  <button onClick={() => handleDeleteMarket(market.id)} className="text-red-500 hover:text-red-700 bg-red-50 p-1.5 rounded-md border border-red-100 transition-colors" title="Excluir Loja">
-                                     <Trash2 className="w-4 h-4" />
-                                  </button>
-                               )}
-                             </div>
-                             <button onClick={() => setManagingAdminsFor(market)} className="text-sm font-bold text-slate-600 hover:text-green-600 flex items-center gap-1 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-100">Admins <UserPlus className="w-4 h-4"/></button>
-                          </div>
-                       </div>
-                    ))}
-                 </div>
-              </div>
+               <div className="flex flex-col gap-6">
+                  {adminMarkets.map(market => (
+                     <div key={market.id} className="bg-white rounded-2xl p-6 border border-slate-100 shadow-sm flex flex-col gap-4">
+                        <div className="flex justify-between items-start">
+                           <div className="flex items-center gap-4">
+                              <div className="w-14 h-14 bg-slate-50 rounded-2xl flex items-center justify-center text-3xl shadow-inner">{market.img || '🏪'}</div>
+                              <div>
+                                 <h3 className="font-bold text-lg text-slate-800">{market.name}</h3>
+                                 <p className="text-sm text-slate-500">{market.cityId || 'Cidade não definida'}</p>
+                              </div>
+                           </div>
+                           
+                           {/* Toggle Aberto/Fechado */}
+                           <button 
+                              onClick={async () => {
+                                 const newVal = !market.isOpen;
+                                 const { error } = await supabase.from('markets').update({ isOpen: newVal }).eq('id', market.id);
+                                 if (!error && updateAdminMarkets) {
+                                    updateAdminMarkets(adminMarkets.map(m => m.id === market.id ? {...m, isOpen: newVal} : m));
+                                 }
+                              }}
+                              className={`flex items-center gap-3 px-5 py-3 rounded-2xl font-bold text-sm transition-all shadow-sm ${market.isOpen ? 'bg-green-500 text-white hover:bg-green-600' : 'bg-slate-200 text-slate-600 hover:bg-slate-300'}`}
+                           >
+                              <div className={`w-5 h-5 rounded-full border-2 transition-all ${market.isOpen ? 'bg-white border-white shadow-md' : 'bg-slate-400 border-slate-400'}`}></div>
+                              {market.isOpen ? 'Loja Aberta' : 'Loja Fechada'}
+                           </button>
+                        </div>
+                        
+                        <div className="flex gap-2 text-xs text-slate-400">
+                           <span className="bg-slate-50 px-2 py-1 rounded">{market.categories?.join(', ') || 'Sem categorias'}</span>
+                        </div>
+                     </div>
+                  ))}
+                  {adminMarkets.length === 0 && (
+                     <div className="text-slate-500 p-10 text-center bg-white rounded-2xl border border-slate-200">
+                        Você não possui lojas vinculadas à sua conta.
+                     </div>
+                  )}
+               </div>
            )}
 
            {activeTab === 'products' && (
-              <div className="flex flex-col gap-6">
-                 <div className="flex justify-between items-center sm:flex-row flex-col gap-4">
-                    <h2 className="text-xl font-bold text-slate-800">Manutenção de Produtos</h2>
-                    <div className="flex gap-3 w-full sm:w-auto">
-                       <select 
-                         className="bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-semibold outline-none w-full sm:w-48 text-slate-700 shadow-sm focus:border-green-500"
-                         value={selectedMarketId}
-                         onChange={e => setSelectedMarketId(e.target.value)}
-                       >
-                          <option value="" disabled>Selecione a loja...</option>
-                          {adminMarkets.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-                       </select>
-                       <button onClick={() => setIsAddingProduct(!isAddingProduct)} className="bg-green-600 hover:bg-green-700 text-white px-5 py-2.5 rounded-xl font-bold text-sm shadow-md transition-colors flex items-center gap-2 whitespace-nowrap">
-                          <PackagePlus className="w-4 h-4" /> {isAddingProduct ? 'Cancelar' : 'Novo Produto'}
-                       </button>
-                    </div>
-                 </div>
-
-                 {isAddingProduct && (
-                    <form onSubmit={handleCreateProduct} className="bg-white border text-left border-green-200 rounded-2xl p-6 shadow-sm flex flex-col gap-4 animate-in fade-in slide-in-from-top-4">
-                       <h3 className="font-bold text-green-800">Cadastrar Produto para {adminMarkets.find(m => m.id === selectedMarketId)?.name}</h3>
-                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          <input type="text" placeholder="URL da Imagem (Opcional)" className="border p-3 rounded-lg outline-none focus:border-green-500" value={newProduct.image} onChange={e => setNewProduct({...newProduct, image: e.target.value})} />
-                          <input type="text" placeholder="Nome do Produto" required className="border p-3 rounded-lg outline-none focus:border-green-500" value={newProduct.name} onChange={e => setNewProduct({...newProduct, name: e.target.value})} />
-                          <div className="flex gap-4">
-                            <input type="number" step="0.01" placeholder="Preço Atual" required className="border p-3 rounded-lg outline-none focus:border-green-500 flex-1" value={newProduct.price || ''} onChange={e => setNewProduct({...newProduct, price: Number(e.target.value)})} />
-                            <input type="number" step="0.01" placeholder="Preço Antigo (Opcional)" className="border p-3 rounded-lg outline-none focus:border-green-500 flex-1" value={newProduct.oldPrice || ''} onChange={e => setNewProduct({...newProduct, oldPrice: Number(e.target.value)})} />
+               // Render Products
+               <div className="flex flex-col gap-4">
+                  <div className="flex justify-between items-center sm:flex-row flex-col gap-4">
+                     <select className="bg-white border border-slate-200 rounded-xl px-4 py-2.5 outline-none w-full sm:w-48" value={selectedMarketId} onChange={e => setSelectedMarketId(e.target.value)}>
+                        {adminMarkets.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                     </select>
+                     <button onClick={() => setIsAddingProduct(!isAddingProduct)} className="bg-green-600 text-white px-5 py-2.5 rounded-xl font-bold flex items-center gap-2">
+                        {isAddingProduct ? 'Cancelar' : 'Novo Produto'}
+                     </button>
+                  </div>
+                  {isAddingProduct && (
+                      <form onSubmit={handleCreateProduct} className="bg-white p-6 rounded-2xl border border-green-200 shadow-sm grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <input type="text" placeholder="Nome" required className="border p-2 rounded" value={newProduct.name} onChange={e => setNewProduct({...newProduct, name: e.target.value})} />
+                          <input type="number" step="0.01" placeholder="Valor" required className="border p-2 rounded" value={newProduct.price} onChange={e => setNewProduct({...newProduct, price: e.target.value})} />
+                          <select className="border p-2 rounded" value={isCreatingCategory ? 'NEW' : newProduct.category} onChange={e => { e.target.value === 'NEW' ? setIsCreatingCategory(true) : setNewProduct({...newProduct, category: e.target.value, newCategory: ''}); setIsCreatingCategory(e.target.value === 'NEW'); }}>
+                             <option value="" disabled>Categoria</option>
+                             {existingCategories.map(c => <option key={c} value={c}>{c}</option>)}
+                             <option value="NEW">+ Nova</option>
+                          </select>
+                          {isCreatingCategory && <input type="text" placeholder="Nova Categoria" required className="border p-2 rounded" value={newProduct.newCategory} onChange={e => setNewProduct({...newProduct, newCategory: e.target.value})} />}
+                          <button type="submit" className="bg-green-600 text-white p-2 rounded col-span-1 md:col-span-2">Salvar</button>
+                      </form>
+                  )}
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mt-4">
+                      {storeProducts.map(p => (
+                          <div key={p.id} className="bg-white p-4 rounded-2xl border border-slate-100 flex flex-col shadow-sm relative group">
+                             {p.platformDiscount && (
+                                <span className="absolute -top-2 -right-2 bg-purple-600 text-white text-[10px] font-bold px-2 py-1 rounded-full shadow-sm z-10 animate-pulse">
+                                   MASTER PROMO
+                                </span>
+                             )}
+                             <span className="text-[10px] uppercase font-bold text-slate-400 mb-1">{p.category}</span>
+                             <span className="font-bold text-slate-800 text-sm leading-tight mb-2 flex-1">{p.name}</span>
+                             
+                             <div className="flex flex-col mb-3">
+                                {p.promotionalPrice || p.platformDiscount ? (
+                                   <>
+                                      <span className="text-xs text-slate-400 line-through">R$ {Number(p.price).toFixed(2).replace('.', ',')}</span>
+                                      <span className="text-green-600 font-extrabold text-lg">
+                                         R$ {Math.max(0, Number(p.promotionalPrice || p.price) - Number(p.platformDiscount || 0)).toFixed(2).replace('.', ',')}
+                                      </span>
+                                      {p.platformDiscount && <span className="text-[10px] text-purple-600 font-bold bg-purple-50 rounded px-1 w-fit mt-0.5">-R$ {Number(p.platformDiscount).toFixed(2).replace('.', ',')} (Plataforma)</span>}
+                                   </>
+                                ) : (
+                                   <span className="text-green-600 font-extrabold text-lg">R$ {Number(p.price).toFixed(2).replace('.', ',')}</span>
+                                )}
+                             </div>
+                             
+                             <div className="flex flex-col gap-1.5 mt-auto">
+                                <button onClick={() => handleSetPromotion(p)} className="bg-yellow-50 text-yellow-700 text-xs font-bold py-1.5 rounded-lg hover:bg-yellow-100 transition-colors">
+                                   {p.promotionalPrice ? 'Alterar Promoção' : 'Criar Promoção Loja'}
+                                </button>
+                                {isSystemAdmin && (
+                                   <button onClick={() => handleSetPlatformDiscount(p)} className="bg-purple-50 text-purple-700 text-xs font-bold py-1.5 rounded-lg hover:bg-purple-100 transition-colors">
+                                      {p.platformDiscount ? 'Edit Master Promo' : '+ Master Promo'}
+                                   </button>
+                                )}
+                                <button onClick={() => handleDeleteProduct(p.id)} className="bg-slate-50 text-red-500 text-xs font-bold py-1.5 rounded-lg hover:bg-red-50 transition-colors">
+                                   Excluir
+                                </button>
+                             </div>
                           </div>
-                          <div className="flex gap-4">
-                             <input type="text" placeholder="Unidade (ex: kg, unidade)" required className="border p-3 rounded-lg outline-none focus:border-green-500 flex-1" value={newProduct.unit} onChange={e => setNewProduct({...newProduct, unit: e.target.value})} />
-                             <input type="text" placeholder="Categoria (ex: Bebidas)" required className="border p-3 rounded-lg outline-none focus:border-green-500 flex-1" value={newProduct.category} onChange={e => setNewProduct({...newProduct, category: e.target.value})} />
-                          </div>
-                          <input type="text" placeholder="Breve descritivo do produto" className="border p-3 rounded-lg outline-none focus:border-green-500 md:col-span-2" value={newProduct.description} onChange={e => setNewProduct({...newProduct, description: e.target.value})} />
-                       </div>
-                       <button type="submit" disabled={!selectedMarketId} className="bg-green-600 text-white font-bold py-3 rounded-lg hover:bg-green-700 disabled:opacity-50">Adicionar ao Catálogo</button>
-                    </form>
-                 )}
-
-                 <div className="bg-white border border-slate-200 rounded-2xl p-10 flex flex-col items-center justify-center text-center">
-                     <p className="text-slate-500 max-w-sm mb-4">A lista de produtos dinâmicos da loja {adminMarkets.find(m => m.id === selectedMarketId)?.name || 'selecionada'} será renderizada aqui sob o banco de dados.</p>
-                     <p className="text-sm font-semibold text-green-600 bg-green-50 px-4 py-2 rounded-lg border border-green-100">Criação de novos itens habilitada na nuvem.</p>
-                 </div>
-              </div>
+                      ))}
+                  </div>
+               </div>
            )}
 
-           {activeTab === 'system' && isSystemAdmin && (
-              <div className="flex flex-col gap-6">
-                 <h2 className="text-xl font-bold text-slate-800">Definições Master</h2>
-                 <div className="bg-amber-50 border border-amber-200 rounded-2xl p-6">
-                    <h3 className="font-bold text-amber-800 flex items-center gap-2 mb-2"><ShieldCheck className="w-5 h-5"/> Administradores Globais</h3>
-                    <p className="text-sm text-amber-700 mb-6">Usuários listados aqui tem permissão para deletar lojas, alterar catálogos e cadastrar novos parceiros logísticos.</p>
+           {activeTab === 'orders' && (
+              <div className="flex flex-col gap-4">
+                 <div className="flex gap-4 items-center">
+                    <select className="bg-white border border-slate-200 rounded-xl px-4 py-2 text-sm font-bold w-48 outline-none" value={selectedMarketId} onChange={e => setSelectedMarketId(e.target.value)}>
+                       {adminMarkets.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                    </select>
+                 </div>
+
+                 {/* Kanban Board */}
+                 <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4 overflow-x-auto pb-4 items-start">
                     
-                    <div className="flex gap-3 max-w-md">
-                       <input type="email" placeholder="Email do novo admin..." className="flex-1 border border-amber-300 bg-white rounded-xl px-4 py-2 text-sm outline-none focus:border-amber-500" />
-                       <button className="bg-amber-600 hover:bg-amber-700 text-white px-5 py-2 rounded-xl font-bold text-sm shadow-sm transition-colors">Conceder</button>
+                    {/* Novos Pedidos */}
+                    <div className="bg-slate-100 rounded-2xl p-4 min-w-[280px] flex flex-col gap-3">
+                        <h3 className="font-bold text-slate-700 flex items-center justify-between">
+                            Novos 
+                            <span className="bg-red-500 text-white text-xs px-2 py-0.5 rounded-full">{newOrders.length}</span>
+                        </h3>
+                        {newOrders.map(order => renderOrderCard(order, (
+                            <>
+                                <button onClick={() => handleUpdateOrderStatus(order.id, 'prep')} className="flex-1 bg-green-500 text-white py-2 rounded-lg text-xs font-bold hover:bg-green-600 flex items-center justify-center gap-1"><Check className="w-4 h-4"/> Aceitar</button>
+                                <button onClick={() => handleUpdateOrderStatus(order.id, 'canceled')} className="flex-1 bg-red-100 text-red-600 py-2 rounded-lg text-xs font-bold hover:bg-red-200">Recusar</button>
+                            </>
+                        )))}
                     </div>
+
+                    {/* Em Preparo */}
+                    <div className="bg-orange-50/50 rounded-2xl p-4 min-w-[280px] flex flex-col gap-3 border border-orange-100">
+                        <h3 className="font-bold text-orange-800 flex items-center justify-between">
+                            Preparando 
+                            <span className="bg-orange-200 text-orange-800 text-xs px-2 py-0.5 rounded-full">{prepOrders.length}</span>
+                        </h3>
+                        {prepOrders.map(order => renderOrderCard(order, (
+                            <button onClick={() => handleUpdateOrderStatus(order.id, 'delivery')} className="w-full bg-orange-500 text-white py-2 rounded-lg text-xs font-bold hover:bg-orange-600">Despachar para Entrega</button>
+                        )))}
+                    </div>
+
+                    {/* Em Entrega */}
+                    <div className="bg-blue-50/50 rounded-2xl p-4 min-w-[280px] flex flex-col gap-3 border border-blue-100">
+                        <h3 className="font-bold text-blue-800 flex items-center justify-between">
+                            Em Rota 
+                            <span className="bg-blue-200 text-blue-800 text-xs px-2 py-0.5 rounded-full">{deliveryOrders.length}</span>
+                        </h3>
+                        {deliveryOrders.map(order => renderOrderCard(order, (
+                            <div className="w-full text-center text-xs text-blue-600 font-semibold py-1">Aguardando confirmação do cliente ou entregador...</div>
+                        )))}
+                    </div>
+
+                    {/* Concluídos */}
+                    <div className="bg-slate-50 rounded-2xl p-4 min-w-[280px] flex flex-col gap-3 opacity-80">
+                        <h3 className="font-bold text-slate-500">Histórico Recente</h3>
+                        {finishedOrders.slice(0, 10).map(order => renderOrderCard(order, (
+                            <span className={`text-xs font-bold ${order.status === 'finished' ? 'text-green-600' : 'text-red-500'}`}>{order.status === 'finished' ? 'Finalizado' : 'Cancelado'}</span>
+                        )))}
+                    </div>
+
                  </div>
               </div>
            )}
         </div>
 
-        {/* Manage Admins Modal */}
-        {managingAdminsFor && (
+        {/* Modal de Chat */}
+        {activeChatOrder && (
            <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-              <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95">
-                 <div className="bg-slate-50 border-b border-slate-100 px-6 py-4 flex justify-between items-center">
-                    <h3 className="font-bold text-lg text-slate-800">Administradores da Loja</h3>
-                    <button onClick={() => setManagingAdminsFor(null)} className="text-slate-400 hover:text-slate-600"><X className="w-5 h-5"/></button>
-                 </div>
-                 <div className="p-6 flex flex-col gap-6">
+              <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl flex flex-col overflow-hidden h-[500px]">
+                 <div className="bg-slate-50 border-b border-slate-100 px-4 py-3 flex justify-between items-center">
                     <div>
-                       <p className="text-sm text-slate-500 mb-2">Loja: <strong>{managingAdminsFor.name}</strong></p>
-                       <div className="flex flex-col gap-2 max-h-40 overflow-y-auto pr-2">
-                          {managingAdminsFor.adminEmails && managingAdminsFor.adminEmails.length > 0 ? (
-                             managingAdminsFor.adminEmails.map((email: string) => (
-                                <div key={email} className="bg-slate-50 border border-slate-100 px-3 py-2 rounded-lg text-sm text-slate-700 flex justify-between items-center gap-2">
-                                   <span className="flex items-center gap-2">
-                                      <ShieldCheck className="w-4 h-4 text-green-600"/> {email}
-                                   </span>
-                                   <button 
-                                      type="button" 
-                                      onClick={() => handleRemoveAdmin(email)} 
-                                      className="text-slate-400 hover:text-red-500 transition-colors"
-                                      title="Remover Administrador"
-                                   >
-                                      <Trash2 className="w-4 h-4" />
-                                   </button>
-                                </div>
-                             ))
-                          ) : (
-                             <p className="text-sm text-slate-400 italic">Nenhum administrador adicional.</p>
-                          )}
-                       </div>
+                       <h3 className="font-bold text-slate-800">Chat - Pedido #{activeChatOrder.id.split('-')[0]}</h3>
+                       <p className="text-xs text-slate-500">Use apenas em caso de necessidade.</p>
                     </div>
-                    <form onSubmit={handleAddAdmin} className="flex flex-col gap-3">
-                       <label className="text-sm font-semibold text-slate-700">Adicionar novo parceiro</label>
-                       <div className="flex gap-2">
-                          <input type="email" placeholder="E-mail do lojista" required className="flex-1 border border-slate-200 p-2.5 rounded-xl outline-none focus:border-green-500 text-sm" value={newAdminEmail} onChange={e => setNewAdminEmail(e.target.value)} />
-                          <button type="submit" className="bg-green-600 hover:bg-green-700 text-white px-4 py-2.5 rounded-xl font-bold text-sm shadow-sm transition-colors">Adicionar</button>
-                       </div>
-                    </form>
+                    <button onClick={() => setActiveChatOrder(null)} className="text-slate-400 hover:text-slate-600"><X className="w-5 h-5"/></button>
                  </div>
+                 <div className="flex-1 p-4 overflow-y-auto flex flex-col gap-3 bg-slate-50/50">
+                    {(!activeChatOrder.chat || activeChatOrder.chat.length === 0) ? (
+                        <div className="text-center text-slate-400 text-sm mt-10">Nenhuma mensagem ainda.</div>
+                    ) : (
+                        activeChatOrder.chat.map((msg: any, i: number) => (
+                           <div key={i} className={`max-w-[80%] p-3 rounded-2xl text-sm ${msg.sender === 'store' ? 'bg-green-100 text-green-900 self-end rounded-br-sm' : 'bg-white border border-slate-200 text-slate-800 self-start rounded-bl-sm'}`}>
+                               {msg.text}
+                               <div className="text-[10px] opacity-50 text-right mt-1">{new Date(msg.time).toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'})}</div>
+                           </div>
+                        ))
+                    )}
+                 </div>
+                 <form onSubmit={handleSendChatMessage} className="p-3 bg-white border-t border-slate-100 flex gap-2">
+                    <input type="text" placeholder="Digite uma mensagem..." className="flex-1 border border-slate-200 rounded-xl px-3 outline-none focus:border-green-500" value={chatMessage} onChange={e => setChatMessage(e.target.value)} />
+                    <button type="submit" disabled={!chatMessage.trim()} className="bg-green-600 text-white p-3 rounded-xl disabled:opacity-50"><Send className="w-4 h-4"/></button>
+                 </form>
               </div>
            </div>
         )}

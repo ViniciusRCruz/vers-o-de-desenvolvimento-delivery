@@ -5,9 +5,8 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { ArrowLeft, MapPin, Search, LocateFixed, Plus, Trash2, Home } from 'lucide-react';
 import { useAppContext } from '../context/AppContext';
-import { auth, db, googleProvider, handleFirestoreError } from '../lib/firebase';
-import { signInWithPopup } from 'firebase/auth';
-import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { supabase } from '../lib/supabase';
+import { CITIES } from '../data/mockData';
 
 // Fix icons
 delete (L.Icon.Default.prototype as any)._getIconUrl;
@@ -61,7 +60,7 @@ function LocationMarker({ position, setPosition, setMapCenter }: { position: L.L
 
 export default function Auth() {
   const navigate = useNavigate();
-  const { isLoggedIn, currentUser, userProfile } = useAppContext();
+  const { isLoggedIn, currentUser, userProfile, selectedCity, setSelectedCity } = useAppContext();
 
   // Screen State
   const [isAddingNew, setIsAddingNew] = useState(false);
@@ -97,14 +96,11 @@ export default function Auth() {
   const handleGoogleLogin = async () => {
     setLoginError('');
     try {
-      await signInWithPopup(auth, googleProvider);
+      const { error } = await supabase.auth.signInWithOAuth({ provider: 'google' });
+      if (error) throw error;
     } catch (error: any) {
       console.error(error);
-      if (error.code === 'auth/unauthorized-domain') {
-        setLoginError('Este domínio da Vercel não está autorizado no Firebase. Para resolver: acesse o painel do Firebase Console > Authentication > Settings (Configurações) > Authorized domains, e adicione o domínio atual da Vercel na lista.');
-      } else {
-        setLoginError(`Erro ao entrar: ${error.message}`);
-      }
+      setLoginError(`Erro ao entrar: ${error.message}`);
     }
   };
 
@@ -120,14 +116,30 @@ export default function Auth() {
           setStreet(data.street || '');
           setCityState(`${data.city || ''} - ${data.state || ''}`);
           
-          if (data.location && data.location.coordinates) {
-            const lat = parseFloat(data.location.coordinates.latitude);
-            const lng = parseFloat(data.location.coordinates.longitude);
-            if (!isNaN(lat) && !isNaN(lng)) {
-              const newPos = new L.LatLng(lat, lng);
-              setPosition(newPos);
-              setMapCenter(newPos);
+          let lat, lng;
+          // Tenta usar as coordenadas da BrasilAPI primeiro
+          if (data.location && data.location.coordinates && data.location.coordinates.latitude) {
+            lat = parseFloat(data.location.coordinates.latitude);
+            lng = parseFloat(data.location.coordinates.longitude);
+          } else if (data.street && data.city) {
+            // Fallback para OpenStreetMap (Nominatim) se a BrasilAPI não devolver coordenadas
+            try {
+               const addressQuery = `${data.street}, ${data.city}, ${data.state}, Brasil`;
+               const geoRes = await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(addressQuery)}`);
+               const geoData = await geoRes.json();
+               if (geoData && geoData.length > 0) {
+                  lat = parseFloat(geoData[0].lat);
+                  lng = parseFloat(geoData[0].lon);
+               }
+            } catch(e) {
+               console.error("Nominatim fallback error", e);
             }
+          }
+
+          if (lat && lng && !isNaN(lat) && !isNaN(lng)) {
+             const newPos = new L.LatLng(lat, lng);
+             setPosition(newPos);
+             setMapCenter(newPos);
           }
         }
       } catch (e) {
@@ -166,7 +178,6 @@ export default function Auth() {
     if (!currentUser) return;
     
     try {
-        const docRef = doc(db, 'users', currentUser.uid, 'private', 'info');
         const addressId = `addr_${Date.now()}`;
         const newAddress = { 
             id: addressId, 
@@ -186,54 +197,61 @@ export default function Auth() {
 
         const updatedAddresses = [...existingAddresses, newAddress];
         
-        await setDoc(docRef, {
+        const { error } = await supabase.from('user_profiles').upsert({
+            id: currentUser.id,
             name,
             email,
             phone,
             addresses: updatedAddresses,
             activeAddressId: addressId,
-            updatedAt: serverTimestamp()
-        }, { merge: true }); // Merge in case they just added an address
+            updated_at: new Date().toISOString()
+        });
+
+        if (error) throw error;
 
         setIsAddingNew(false);
         if(!userProfile) { // if the user just created the profile
             navigate('/');
         }
         window.location.reload(); 
-    } catch (error) {
-        handleFirestoreError(error, 'update', `/users/${currentUser.uid}/private/info`);
+    } catch (error: any) {
+        console.error(error);
+        setFormError('Erro ao salvar perfil: ' + error.message);
     }
   };
 
   const handleSelectAddress = async (addrId: string) => {
     if (!currentUser) return;
     try {
-        const docRef = doc(db, 'users', currentUser.uid, 'private', 'info');
-        await setDoc(docRef, {
+        const { error } = await supabase.from('user_profiles').update({
             activeAddressId: addrId,
-            updatedAt: serverTimestamp()
-        }, { merge: true });
+            updated_at: new Date().toISOString()
+        }).eq('id', currentUser.id);
+
+        if (error) throw error;
         window.location.reload();
-    } catch (error) {
-        handleFirestoreError(error, 'update', `/users/${currentUser.uid}/private/info`);
+    } catch (error: any) {
+        console.error(error);
     }
   };
 
   const handleDeleteAddress = async (addrId: string) => {
       if(!currentUser || !userProfile) return;
       try {
-          const docRef = doc(db, 'users', currentUser.uid, 'private', 'info');
           const remaining = userProfile.addresses.filter((a: any) => a.id !== addrId);
           // Auto select another if we deleted the active one
           let newActive = userProfile.activeAddressId;
           if(newActive === addrId) {
              newActive = remaining.length > 0 ? remaining[0].id : '';
           }
-          await setDoc(docRef, {
+
+          const { error } = await supabase.from('user_profiles').update({
               addresses: remaining,
               activeAddressId: newActive,
-              updatedAt: serverTimestamp()
-          }, { merge: true });
+              updated_at: new Date().toISOString()
+          }).eq('id', currentUser.id);
+
+          if (error) throw error;
           window.location.reload();
       } catch (error) {
           console.error(error);
@@ -256,8 +274,24 @@ export default function Auth() {
         <main className="flex-1 max-w-2xl w-full mx-auto p-6 md:p-10">
           <div className="bg-white rounded-3xl shadow-xl shadow-slate-200/50 border border-slate-100 p-8">
             <div className="flex justify-between items-center mb-6 border-b border-slate-100 pb-4">
+               <h2 className="text-2xl font-bold text-slate-800">Minha Cidade</h2>
+            </div>
+            <div className="mb-8">
+               <select 
+                 className="w-full bg-slate-50 border border-slate-200 p-4 rounded-2xl font-bold text-slate-700 outline-none focus:border-green-500 transition-all cursor-pointer shadow-sm"
+                 value={selectedCity.id}
+                 onChange={(e) => {
+                    const city = CITIES.find(c => c.id === e.target.value);
+                    if(city) setSelectedCity(city);
+                 }}
+               >
+                 {CITIES.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+               </select>
+            </div>
+
+            <div className="flex justify-between items-center mb-6 border-b border-slate-100 pb-4">
                <h2 className="text-2xl font-bold text-slate-800">Meus Endereços</h2>
-               <button onClick={() => { auth.signOut(); navigate('/'); }} className="text-sm font-bold text-red-500 hover:text-red-700 hover:bg-red-50 px-3 py-1.5 rounded-lg transition-colors">
+               <button onClick={() => { supabase.auth.signOut(); navigate('/'); }} className="text-sm font-bold text-red-500 hover:text-red-700 hover:bg-red-50 px-3 py-1.5 rounded-lg transition-colors">
                  Sair da Conta
                </button>
             </div>
@@ -366,6 +400,20 @@ export default function Auth() {
                   </svg>
                   Continuar com Google
                 </button>
+
+                <div className="mt-8 border-t border-slate-100 pt-6">
+                   <h3 className="text-sm font-bold text-slate-500 mb-3 text-center uppercase tracking-wider">Onde você está?</h3>
+                   <select 
+                     className="w-full bg-slate-50 border border-slate-200 p-4 rounded-2xl font-bold text-slate-700 outline-none focus:border-green-500 transition-all cursor-pointer shadow-sm text-center"
+                     value={selectedCity.id}
+                     onChange={(e) => {
+                        const city = CITIES.find(c => c.id === e.target.value);
+                        if(city) setSelectedCity(city);
+                     }}
+                   >
+                     {CITIES.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                   </select>
+                </div>
               </div>
             ) : (
               <form onSubmit={handleSaveProfile} className="flex flex-col gap-5">

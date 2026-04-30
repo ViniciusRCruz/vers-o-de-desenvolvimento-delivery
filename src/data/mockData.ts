@@ -1,6 +1,6 @@
 export interface Product { id: string; name: string; category: string; price: number; unit: string; img: string; }
 export interface Market { id: string; name: string; rating: number; deliveryTime: string; fee: number; img: string; categories: string[]; cityId: string; }
-export interface CartItem extends Product { qty: number; }
+export interface CartItem extends Product { qty: number; observation?: string; originalId?: string; }
 export interface Order { id: string; date: string; total: number; status: 'Recebido' | 'Em separação' | 'Em entrega' | 'Entregue'; items: CartItem[]; marketName: string; }
 
 export const CITIES = [

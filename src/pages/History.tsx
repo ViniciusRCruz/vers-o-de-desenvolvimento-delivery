@@ -18,6 +18,15 @@ export default function History() {
     navigate('/checkout');
   };
 
+  const getStatusLabel = (status: string) => {
+     if (status === 'pending') return 'Recebido';
+     if (status === 'prep') return 'Em Separação';
+     if (status === 'delivery') return 'Saiu para Entrega';
+     if (status === 'finished') return 'Concluído';
+     if (status === 'canceled') return 'Cancelado';
+     return status;
+  };
+
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col">
       <Header />
@@ -42,10 +51,13 @@ export default function History() {
                        <Store className="w-5 h-5 text-slate-400" />
                        <h3 className="font-bold text-lg text-slate-800">{order.marketName}</h3>
                     </div>
-                    <span className="text-sm text-slate-500 flex items-center gap-1"><Clock className="w-3 h-3" /> {new Date(order.createdAt || order.date).toLocaleDateString('pt-BR')} • {order.id.slice(0, 8)}</span>
+                    <span className="text-sm text-slate-500 flex items-center gap-1"><Clock className="w-3 h-3" /> {new Date(order.createdAt || order.date).toLocaleDateString('pt-BR')} • {order.id.split('-')[0]}</span>
                   </div>
-                  <div className="bg-slate-100 text-slate-600 px-3 py-1 rounded-lg text-sm font-semibold">
-                    {order.status}
+                  <div className={`px-3 py-1 rounded-lg text-sm font-semibold
+                      ${order.status === 'finished' ? 'bg-green-100 text-green-700' : 
+                        order.status === 'canceled' ? 'bg-red-100 text-red-700' : 
+                        'bg-blue-100 text-blue-700'}`}>
+                    {getStatusLabel(order.status)}
                   </div>
                 </div>
 
@@ -56,10 +68,16 @@ export default function History() {
                   <p className="font-bold text-slate-800">R$ {order.total.toFixed(2).replace('.', ',')}</p>
                 </div>
 
-                <div className="pt-2">
+                <div className="pt-2 flex flex-col md:flex-row gap-3">
+                  <button 
+                    onClick={() => navigate(`/tracking/${order.id}`)}
+                    className="flex-1 bg-slate-100 text-slate-700 px-6 py-2.5 rounded-xl font-bold text-sm flex items-center justify-center transition-colors hover:bg-slate-200"
+                  >
+                    Acompanhar / Detalhes
+                  </button>
                   <button 
                     onClick={() => handleReorder(order.items)}
-                    className="w-full md:w-auto bg-green-50 text-green-700 px-6 py-2.5 rounded-xl font-bold text-sm flex items-center justify-center gap-2 hover:bg-green-100 transition-colors"
+                    className="flex-1 bg-green-50 text-green-700 px-6 py-2.5 rounded-xl font-bold text-sm flex items-center justify-center gap-2 hover:bg-green-100 transition-colors"
                   >
                     <RefreshCcw className="w-4 h-4" /> Refazer Pedido
                   </button>
