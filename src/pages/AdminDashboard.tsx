@@ -334,19 +334,25 @@ export default function AdminDashboard() {
   const deliveryOrders = storeOrders.filter(o => o.status === 'delivery');
   const finishedOrders = storeOrders.filter(o => o.status === 'finished' || o.status === 'canceled');
 
-  const renderOrderCard = (order: any, actions: React.ReactNode) => (
-      <div key={order.id} className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm flex flex-col gap-3">
+  const renderOrderCard = (order: any, actions: React.ReactNode) => {
+      const hasUnreadMessage = order.chat && order.chat.length > 0 && order.chat[order.chat.length-1].sender === 'customer';
+      return (
+      <div key={order.id} className={`bg-white border-2 rounded-xl p-4 shadow-sm flex flex-col gap-3 transition-colors ${hasUnreadMessage ? 'border-red-400 bg-red-50/30' : 'border-slate-100'}`}>
          <div className="flex justify-between items-start">
              <div>
                 <span className="font-bold text-slate-800 text-sm">#{order.id.split('-')[0]}</span>
                 <div className="text-xs text-slate-400">{new Date(order.created_at).toLocaleTimeString('pt-BR')}</div>
              </div>
-             <button onClick={() => setActiveChatOrder(order)} className="text-slate-400 hover:text-blue-500 relative">
-                 <MessageCircle className="w-5 h-5" />
-                 {order.chat && order.chat.length > 0 && order.chat[order.chat.length-1].sender === 'customer' && (
-                     <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white"></span>
-                 )}
-             </button>
+             {hasUnreadMessage ? (
+                 <button onClick={() => setActiveChatOrder(order)} className="bg-red-500 text-white hover:bg-red-600 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold shadow-md animate-bounce">
+                     <MessageCircle className="w-4 h-4 shrink-0" />
+                     <span>Mensagem</span>
+                 </button>
+             ) : (
+                 <button onClick={() => setActiveChatOrder(order)} className="text-slate-400 hover:text-blue-500 bg-slate-50 p-2 rounded-full relative transition-colors">
+                     <MessageCircle className="w-5 h-5" />
+                 </button>
+             )}
          </div>
          
          <div className="text-xs text-slate-600">
@@ -370,6 +376,7 @@ export default function AdminDashboard() {
          </div>
       </div>
   );
+};
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col font-sans">
