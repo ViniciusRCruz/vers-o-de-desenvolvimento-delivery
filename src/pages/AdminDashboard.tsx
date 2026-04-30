@@ -270,9 +270,12 @@ export default function AdminDashboard() {
       try {
          const { error } = await supabase.from('orders').update({ status: newStatus }).eq('id', orderId);
          if (error) throw error;
-         // Realtime vai atualizar o estado local
-      } catch (err) {
-         alert("Erro ao atualizar status.");
+         
+         // Atualiza o estado local imediatamente (otimista)
+         setStoreOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: newStatus } : o));
+      } catch (err: any) {
+         console.error(err);
+         alert("Erro ao atualizar status do pedido: " + err.message);
       }
   };
 
@@ -551,7 +554,9 @@ export default function AdminDashboard() {
                             <span className="bg-blue-200 text-blue-800 text-xs px-2 py-0.5 rounded-full">{deliveryOrders.length}</span>
                         </h3>
                         {deliveryOrders.map(order => renderOrderCard(order, (
-                            <div className="w-full text-center text-xs text-blue-600 font-semibold py-1">Aguardando confirmação do cliente ou entregador...</div>
+                            <button onClick={() => handleUpdateOrderStatus(order.id, 'finished')} className="w-full bg-blue-500 text-white py-2 rounded-lg text-xs font-bold hover:bg-blue-600 flex items-center justify-center gap-1">
+                                <Check className="w-4 h-4"/> Marcar como Entregue
+                            </button>
                         )))}
                     </div>
 
