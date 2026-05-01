@@ -86,7 +86,7 @@ export default function HomeList() {
       <main className="flex-1 max-w-7xl w-full mx-auto p-6 md:p-10 flex flex-col gap-10">
         
         {/* Banner principal promocional */}
-        <div className="h-[180px] md:h-[220px] bg-gradient-to-r from-green-500 to-emerald-600 rounded-3xl relative overflow-hidden text-white flex items-center px-8 md:px-12 shadow-lg hover:scale-[1.01] transition-transform cursor-pointer" onClick={() => setActiveCategory('Promoções')}>
+        <div className="h-[180px] md:h-[220px] bg-gradient-to-r from-[#003B5C] to-[#005a8c] rounded-3xl relative overflow-hidden text-white flex items-center px-8 md:px-12 shadow-lg hover:scale-[1.01] transition-transform cursor-pointer" onClick={() => setActiveCategory('Promoções')}>
           <div className="relative z-10">
             <span className="bg-white/20 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider mb-3 inline-block">App Promos</span>
             <h1 className="text-3xl md:text-4xl font-extrabold mb-2 leading-tight">Oportunidades<br/>Especiais</h1>
@@ -105,7 +105,7 @@ export default function HomeList() {
               <button 
                 key={cat} 
                 onClick={() => setActiveCategory(cat)}
-                className={`whitespace-nowrap flex items-center gap-2 px-6 py-2.5 rounded-full font-bold text-sm transition-all shadow-sm border ${isActive ? 'bg-green-600 text-white border-green-600' : 'bg-white text-slate-600 border-slate-200 hover:border-green-300 hover:text-green-600'}`}
+                className={`whitespace-nowrap flex items-center gap-2 px-6 py-2.5 rounded-full font-bold text-sm transition-all shadow-sm border ${isActive ? 'bg-[#003B5C] text-white border-[#003B5C]' : 'bg-white text-slate-600 border-slate-200 hover:border-[#003B5C] hover:text-[#003B5C]'}`}
               >
                 {cat === 'Promoções' && <Tag className="w-4 h-4" />}
                 {cat}
@@ -148,9 +148,9 @@ export default function HomeList() {
                                      <div className="w-10 h-10 bg-slate-50 rounded-xl flex items-center justify-center text-2xl group-hover:scale-110 transition-transform">
                                         {market.img}
                                      </div>
-                                     <h3 className="font-bold text-lg text-slate-800 group-hover:text-green-600 transition-colors">{market.name}</h3>
+                                     <h3 className="font-bold text-lg text-slate-800 group-hover:text-[#003B5C] transition-colors">{market.name}</h3>
                                   </div>
-                                  <div className="text-sm text-green-600 font-semibold group-hover:underline">Ver Loja &rarr;</div>
+                                  <div className="text-sm text-[#003B5C] font-semibold group-hover:underline">Ver Loja &rarr;</div>
                               </div>
                               
                               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -212,7 +212,7 @@ export default function HomeList() {
                               {market.img}
                             </div>
                             <div className="flex-1">
-                              <h3 className={`font-bold text-lg transition-colors ${isClosed ? 'text-slate-500' : 'text-slate-800 group-hover:text-green-600'}`}>{market.name}</h3>
+                              <h3 className={`font-bold text-lg transition-colors ${isClosed ? 'text-slate-500' : 'text-slate-800 group-hover:text-[#003B5C]'}`}>{market.name}</h3>
                               <div className="flex items-center gap-2 text-sm text-slate-500 mt-1">
                                 <span className="flex items-center gap-1 text-yellow-500 font-bold">
                                   <Star className="w-4 h-4 fill-current" /> 

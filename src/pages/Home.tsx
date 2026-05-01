@@ -65,7 +65,7 @@ export default function StoreView() {
       <div className="min-h-screen bg-slate-100 flex flex-col items-center justify-center font-sans">
          <div className="text-4xl mb-4">🏪</div>
          <h2 className="text-2xl font-bold text-slate-800 mb-4">Loja não encontrada</h2>
-         <button onClick={() => navigate('/')} className="bg-green-600 text-white px-6 py-2 rounded-xl font-bold">Voltar</button>
+         <button onClick={() => navigate('/')} className="bg-[#003B5C] text-white px-6 py-2 rounded-xl font-bold">Voltar</button>
       </div>
     );
   }
@@ -89,7 +89,7 @@ export default function StoreView() {
         {/* Sidebar */}
         <aside className="w-full md:w-56 shrink-0 flex flex-col gap-2">
           
-          <button onClick={() => navigate('/')} className="flex items-center gap-2 text-slate-500 hover:text-green-600 font-medium w-fit mb-4">
+          <button onClick={() => navigate('/')} className="flex items-center gap-2 text-slate-500 hover:text-[#003B5C] font-medium w-fit mb-4">
             <ArrowLeft className="w-4 h-4" /> Voltar
           </button>
 
@@ -102,7 +102,7 @@ export default function StoreView() {
               <button 
                 key={i}
                 onClick={() => setActiveCategory(cat as string)}
-                className={`whitespace-nowrap flex items-center gap-3 px-4 py-3 rounded-xl text-[15px] font-medium transition-all ${activeCategory === cat ? 'bg-green-600 text-white shadow-sm shadow-green-600/20' : 'text-slate-600 hover:bg-slate-200'}`}
+                className={`whitespace-nowrap flex items-center gap-3 px-4 py-3 rounded-xl text-[15px] font-medium transition-all ${activeCategory === cat ? 'bg-[#003B5C] text-white shadow-sm shadow-[#003B5C]/20' : 'text-slate-600 hover:bg-slate-200'}`}
               >
                 {cat as string}
               </button>
@@ -114,7 +114,7 @@ export default function StoreView() {
         <section className="flex-1 flex flex-col gap-8 min-w-0">
           {/* Hero Banner */}
           <div 
-             className={`h-[240px] md:h-[200px] rounded-3xl relative overflow-hidden text-white flex items-center px-8 md:px-10 shadow-lg ${storeClosed ? 'bg-slate-700 shadow-slate-500/20' : 'bg-green-600 shadow-green-500/20'}`}
+             className={`h-[240px] md:h-[200px] rounded-3xl relative overflow-hidden text-white flex items-center px-8 md:px-10 shadow-lg ${storeClosed ? 'bg-slate-700 shadow-slate-500/20' : 'bg-[#003B5C] shadow-[#003B5C]/20'}`}
              style={market.cover ? { backgroundImage: `url(${market.cover})`, backgroundSize: 'cover', backgroundPosition: 'center' } : {}}
           >
             {/* Overlay Escuro para Legibilidade */}
@@ -164,8 +164,8 @@ export default function StoreView() {
             ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
                   {filteredProducts.map(product => (
-                    <div key={product.id} onClick={() => { if(!storeClosed) { setSelectedProduct(product); setModalQty(1); setModalObs(''); } }} className={`bg-white rounded-2xl p-4 shadow-sm border border-slate-100 flex flex-col gap-3 group hover:shadow-md hover:border-green-100 transition-all duration-300 ${storeClosed ? '' : 'cursor-pointer'}`}>
-                      <div className="h-[140px] bg-slate-50 rounded-xl flex items-center justify-center text-6xl group-hover:scale-105 transition-transform duration-300 group-hover:bg-green-50/50 select-none overflow-hidden relative">
+                    <div key={product.id} onClick={() => { if(!storeClosed) { setSelectedProduct(product); setModalQty(1); setModalObs(''); } }} className={`bg-white rounded-2xl p-4 shadow-sm border border-slate-100 flex flex-col gap-3 group hover:shadow-md hover:border-[#003B5C]/20 transition-all duration-300 ${storeClosed ? '' : 'cursor-pointer'}`}>
+                      <div className="h-[140px] bg-slate-50 rounded-xl flex items-center justify-center text-6xl group-hover:scale-105 transition-transform duration-300 group-hover:bg-[#003B5C]/5 select-none overflow-hidden relative">
                         {product.image && product.image.startsWith('http') ? (
                             <img src={product.image} alt={product.name} className="w-full h-full object-cover" />
                         ) : (
@@ -173,7 +173,7 @@ export default function StoreView() {
                         )}
                       </div>
                       <div className="flex flex-col mt-1">
-                        <h3 className="text-[15px] font-semibold text-slate-800 mb-0.5 group-hover:text-green-600 transition-colors line-clamp-1">{product.name}</h3>
+                        <h3 className="text-[15px] font-semibold text-slate-800 mb-0.5 group-hover:text-[#003B5C] transition-colors line-clamp-1">{product.name}</h3>
                         <span className="text-xs font-medium text-slate-400">{product.unit || 'unidade'}</span>
                       </div>
                       <div className="flex justify-between items-center mt-auto pt-2">
@@ -182,7 +182,7 @@ export default function StoreView() {
                           onClick={() => { if (!storeClosed) addToCart(product); }}
                           disabled={storeClosed}
                           title={storeClosed ? 'Loja fechada' : 'Adicionar ao carrinho'}
-                          className={`w-9 h-9 rounded-xl border-0 text-xl font-bold flex items-center justify-center transition-all ${storeClosed ? 'bg-slate-100 text-slate-300 cursor-not-allowed' : 'bg-slate-100 hover:bg-green-600 text-slate-600 hover:text-white cursor-pointer active:scale-95 hover:shadow-md hover:shadow-green-600/30'}`}
+                          className={`w-9 h-9 rounded-xl border-0 text-xl font-bold flex items-center justify-center transition-all ${storeClosed ? 'bg-slate-100 text-slate-300 cursor-not-allowed' : 'bg-slate-100 hover:bg-[#003B5C] text-slate-600 hover:text-white cursor-pointer active:scale-95 hover:shadow-md hover:shadow-[#003B5C]/30'}`}
                         >
                           {storeClosed ? '🔒' : '+'}
                         </button>
@@ -195,11 +195,11 @@ export default function StoreView() {
 
           <div className="mt-8 pt-6 border-t border-slate-200 flex flex-wrap gap-x-8 gap-y-4 text-sm font-medium">
             <div className="flex items-center gap-2.5 text-slate-500">
-              <span className="w-2 h-2 bg-green-500 rounded-full shadow-[0_0_8px_rgba(34,197,94,0.6)]"></span>
+              <span className="w-2 h-2 bg-[#003B5C] rounded-full shadow-[0_0_8px_rgba(0,59,92,0.6)]"></span>
               Entrega em {market.deliveryTime} min
             </div>
             <div className="flex items-center gap-2.5 text-slate-500">
-              <span className="w-2 h-2 bg-green-500 rounded-full shadow-[0_0_8px_rgba(34,197,94,0.6)]"></span>
+              <span className="w-2 h-2 bg-[#003B5C] rounded-full shadow-[0_0_8px_rgba(0,59,92,0.6)]"></span>
               Taxa: R$ {market.fee === 0 ? 'Grátis' : Number(market.fee).toFixed(2).replace('.', ',')}
             </div>
           </div>
@@ -242,7 +242,7 @@ export default function StoreView() {
              {/* Content */}
              <div className="p-6 flex flex-col gap-5">
                 <div>
-                   <span className="text-[10px] uppercase font-bold text-green-600 tracking-wider">{selectedProduct.category}</span>
+                   <span className="text-[10px] uppercase font-bold text-[#003B5C] tracking-wider">{selectedProduct.category}</span>
                    <h2 className="text-xl font-extrabold text-slate-800 mt-1">{selectedProduct.name}</h2>
                    {selectedProduct.description && (
                       <p className="text-sm text-slate-500 mt-2 leading-relaxed">{selectedProduct.description}</p>
@@ -254,7 +254,7 @@ export default function StoreView() {
                    {(selectedProduct.promotionalPrice || selectedProduct.platformDiscount) ? (
                       <>
                          <span className="text-sm text-slate-400 line-through">R$ {Number(selectedProduct.price).toFixed(2).replace('.', ',')}</span>
-                         <span className="text-2xl font-extrabold text-green-600">
+                         <span className="text-2xl font-extrabold text-[#003B5C]">
                             R$ {Math.max(0, Number(selectedProduct.promotionalPrice || selectedProduct.price) - Number(selectedProduct.platformDiscount || 0)).toFixed(2).replace('.', ',')}
                          </span>
                       </>
@@ -269,14 +269,14 @@ export default function StoreView() {
                    <div className="flex items-center gap-4">
                       <button 
                          onClick={() => setModalQty(Math.max(1, modalQty - 1))} 
-                         className="w-10 h-10 rounded-xl bg-white border border-slate-200 flex items-center justify-center text-slate-600 hover:border-green-500 hover:text-green-600 transition-colors shadow-sm"
+                         className="w-10 h-10 rounded-xl bg-white border border-slate-200 flex items-center justify-center text-slate-600 hover:border-[#003B5C] hover:text-[#003B5C] transition-colors shadow-sm"
                       >
                          <Minus className="w-4 h-4" />
                       </button>
                       <span className="text-xl font-extrabold text-slate-800 w-8 text-center">{modalQty}</span>
                       <button 
                          onClick={() => setModalQty(modalQty + 1)} 
-                         className="w-10 h-10 rounded-xl bg-green-600 text-white flex items-center justify-center hover:bg-green-700 transition-colors shadow-sm"
+                         className="w-10 h-10 rounded-xl bg-[#003B5C] text-white flex items-center justify-center hover:bg-[#005a8c] transition-colors shadow-sm"
                       >
                          <Plus className="w-4 h-4" />
                       </button>
@@ -288,7 +288,7 @@ export default function StoreView() {
                    <label className="text-sm font-bold text-slate-700">Alguma observação?</label>
                    <textarea 
                       placeholder="Ex: Sem cebola, ponto da carne mal passado, trocar por integral..."
-                      className="w-full bg-slate-50 border border-slate-200 p-3.5 rounded-xl text-sm text-slate-600 resize-none h-20 focus:outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500 transition-all"
+                      className="w-full bg-slate-50 border border-slate-200 p-3.5 rounded-xl text-sm text-slate-600 resize-none h-20 focus:outline-none focus:border-[#003B5C] focus:ring-1 focus:ring-[#003B5C] transition-all"
                       value={modalObs}
                       onChange={e => setModalObs(e.target.value)}
                       maxLength={200}
@@ -302,7 +302,7 @@ export default function StoreView() {
                       addToCart(selectedProduct, modalQty, modalObs.trim() || undefined);
                       setSelectedProduct(null);
                    }}
-                   className="w-full bg-green-600 text-white py-4 rounded-2xl font-extrabold text-base hover:bg-green-700 transition-colors shadow-lg shadow-green-600/20 flex items-center justify-center gap-3"
+                   className="w-full bg-[#003B5C] text-white py-4 rounded-2xl font-extrabold text-base hover:bg-[#005a8c] transition-colors shadow-lg shadow-[#003B5C]/20 flex items-center justify-center gap-3"
                 >
                    Adicionar R$ {(
                       Math.max(0, Number(selectedProduct.promotionalPrice || selectedProduct.price) - Number(selectedProduct.platformDiscount || 0)) * modalQty

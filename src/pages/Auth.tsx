@@ -7,6 +7,8 @@ import { ArrowLeft, MapPin, Search, LocateFixed, Plus, Trash2, Home } from 'luci
 import { useAppContext } from '../context/AppContext';
 import { supabase } from '../lib/supabase';
 import { CITIES } from '../data/mockData';
+import Logo from '../components/Logo';
+
 
 // Fix icons
 delete (L.Icon.Default.prototype as any)._getIconUrl;
@@ -273,7 +275,15 @@ export default function Auth() {
             <button onClick={() => navigate('/')} className="flex items-center gap-2 text-slate-500 hover:text-green-600 font-medium transition-colors">
             <ArrowLeft className="w-5 h-5" /> Início
             </button>
-            <div className="mx-auto text-2xl font-extrabold text-green-600 tracking-tight pr-10">FRESHMERCADO</div>
+            <div className="mx-auto pr-10">
+              <div className="flex items-center gap-1.5 leading-none">
+                <Logo size="sm" showText={false} />
+                <div className="flex flex-col">
+                  <span className="text-xl font-black tracking-tighter text-[#003B5C]">PARNAÍBA</span>
+                  <span className="text-[10px] font-bold tracking-[0.2em] text-[#003B5C] uppercase">Delivery</span>
+                </div>
+              </div>
+            </div>
         </header>
 
         <main className="flex-1 max-w-2xl w-full mx-auto p-6 md:p-10">
@@ -371,8 +381,14 @@ export default function Auth() {
         >
           <ArrowLeft className="w-5 h-5" /> Voltar
         </button>
-        <div className="mx-auto text-2xl font-extrabold text-green-600 tracking-tight pr-10">
-          FRESHMERCADO
+        <div className="mx-auto pr-10">
+          <div className="flex items-center gap-1.5 leading-none">
+            <Logo size="sm" showText={false} />
+            <div className="flex flex-col">
+              <span className="text-xl font-black tracking-tighter text-[#003B5C]">PARNAÍBA</span>
+              <span className="text-[10px] font-bold tracking-[0.2em] text-[#003B5C] uppercase">Delivery</span>
+            </div>
+          </div>
         </div>
       </header>
 

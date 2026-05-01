@@ -10,7 +10,7 @@ export const CITIES = [
 ];
 
 export const MARKETS: Market[] = [
-  { id: 'm1', cityId: 'sao-paulo-sp', name: 'FreshMercado Central', rating: 4.8, deliveryTime: '30-45', fee: 0, img: '🏪', categories: ['Hortifruti', 'Açougue', 'Bebidas'] },
+  { id: 'm1', cityId: 'sao-paulo-sp', name: 'Parnaíba Central', rating: 4.8, deliveryTime: '30-45', fee: 0, img: '🏪', categories: ['Hortifruti', 'Açougue', 'Bebidas'] },
   { id: 'm2', cityId: 'sao-paulo-sp', name: 'Super Bom (Paulista)', rating: 4.5, deliveryTime: '20-30', fee: 5.9, img: '🛒', categories: ['Mercearia', 'Limpeza', 'Padaria'] },
   { id: 'm3', cityId: 'salvador-ba', name: 'Atacadão Abaeté', rating: 4.9, deliveryTime: '45-60', fee: 9.9, img: '🏭', categories: ['Atacado', 'Bebidas'] },
   { id: 'm4', cityId: 'salvador-ba', name: 'Mercado Pelourinho', rating: 4.6, deliveryTime: '15-25', fee: 2.5, img: '🌴', categories: ['Mercearia', 'Feira'] },
@@ -34,7 +34,7 @@ export const PAST_ORDERS: Order[] = [
     date: '10/04/2026', 
     total: 39.70, 
     status: 'Entregue', 
-    marketName: 'FreshMercado Central', 
+    marketName: 'Parnaíba Central', 
     items: [{...PRODUCTS[0], qty:2}, {...PRODUCTS[3], qty:1}] 
   }
 ];

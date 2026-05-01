@@ -3,6 +3,8 @@ import { Search, User, ShoppingCart, ListOrdered, ShieldAlert, Store, Tag, X } f
 import { Link, useNavigate } from 'react-router-dom';
 import { useAppContext } from '../context/AppContext';
 import { supabase } from '../lib/supabase';
+import Logo from './Logo';
+
 
 export default function Header() {
   const { cartCount, isLoggedIn, selectedCity, isSystemAdmin, adminMarkets } = useAppContext();
@@ -120,8 +122,12 @@ export default function Header() {
 
   return (
     <header className="bg-white px-4 md:px-10 h-16 md:h-20 flex items-center justify-between border-b border-slate-200 z-50 sticky top-0">
-      <Link to="/" className="text-xl md:text-2xl font-extrabold text-green-600 tracking-tight flex items-center gap-2 shrink-0">
-        FRESHMERCADO
+      <Link to="/" className="flex items-center gap-2 shrink-0 hover:opacity-90 transition-opacity">
+        <Logo size="sm" showText={false} />
+        <div className="flex flex-col leading-none">
+          <span className="text-xl font-black tracking-tighter text-[#003B5C]">PARNAÍBA</span>
+          <span className="text-[10px] font-bold tracking-[0.2em] text-[#003B5C] uppercase">Delivery</span>
+        </div>
       </Link>
       
       {/* Search Bar — Desktop inline, Mobile icon toggle */}
