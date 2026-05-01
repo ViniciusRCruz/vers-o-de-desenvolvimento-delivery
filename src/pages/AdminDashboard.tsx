@@ -266,18 +266,28 @@ export default function AdminDashboard() {
       }
   };
 
-  const handleUpdateOrderStatus = async (orderId: string, newStatus: string) => {
-      try {
-         const { error } = await supabase.from('orders').update({ status: newStatus }).eq('id', orderId);
-         if (error) throw error;
-         
-         // Atualiza o estado local imediatamente (otimista)
-         setStoreOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: newStatus } : o));
-      } catch (err: any) {
-         console.error(err);
-         alert("Erro ao atualizar status do pedido: " + err.message);
-      }
-  };
+   const handleUpdateOrderStatus = async (orderId: string, newStatus: string) => {
+       try {
+          // Busca o histórico atual primeiro
+          const { data: current } = await supabase.from('orders').select('statusHistory').eq('id', orderId).single();
+          const history = current?.statusHistory || {};
+          const updatedHistory = { ...history, [newStatus]: new Date().toISOString() };
+
+          const { error } = await supabase.from('orders').update({ 
+             status: newStatus,
+             statusHistory: updatedHistory,
+             // Se for finalizado, garantimos o finishedAt para compatibilidade
+             ...(newStatus === 'finished' ? { finishedAt: new Date().toISOString() } : {})
+          }).eq('id', orderId);
+
+          if (error) throw error;
+          
+          setStoreOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: newStatus, statusHistory: updatedHistory } : o));
+       } catch (err: any) {
+          console.error(err);
+          alert("Erro ao atualizar status do pedido: " + err.message);
+       }
+   };
 
   const handleSendChatMessage = async (e: React.FormEvent) => {
       e.preventDefault();

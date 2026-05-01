@@ -145,18 +145,25 @@ export default function Tracking() {
   const step = getStepNumber(order.status);
 
   const stepsInfo = [
-    { num: 1, title: 'Recebido', icon: <CheckCircle2 className="w-6 h-6" /> },
-    { num: 2, title: 'Em Separação', icon: <CookingPot className="w-6 h-6" /> },
-    { num: 3, title: 'Em Entrega', icon: <Truck className="w-6 h-6" /> },
-    { num: 4, title: 'Entregue', icon: <PackageCheck className="w-6 h-6" /> }
+    { num: 1, key: 'pending', title: 'Recebido', icon: <CheckCircle2 className="w-6 h-6" /> },
+    { num: 2, key: 'prep', title: 'Em Separação', icon: <CookingPot className="w-6 h-6" /> },
+    { num: 3, key: 'delivery', title: 'Em Entrega', icon: <Truck className="w-6 h-6" /> },
+    { num: 4, key: 'finished', title: 'Entregue', icon: <PackageCheck className="w-6 h-6" /> }
   ];
+
+  const formatStatusTime = (key: string) => {
+    if (key === 'pending') return new Date(order.createdAt).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    const time = order.statusHistory?.[key];
+    if (!time) return null;
+    return new Date(time).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  };
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col font-sans">
       <Header />
       <main className="flex-1 max-w-3xl w-full mx-auto p-6 md:p-10 flex flex-col gap-6">
-        <button onClick={() => navigate('/')} className="flex items-center gap-2 text-slate-500 hover:text-green-600 font-medium w-fit">
-          <ArrowLeft className="w-5 h-5" /> Voltar ao Início
+        <button onClick={() => navigate(-1)} className="flex items-center gap-2 text-slate-500 hover:text-green-600 font-medium w-fit">
+          <ArrowLeft className="w-5 h-5" /> Voltar
         </button>
 
         <div className="bg-white rounded-3xl p-8 shadow-sm border border-slate-100 text-center flex flex-col items-center relative overflow-hidden">
@@ -184,9 +191,14 @@ export default function Tracking() {
              {order.status === 'canceled' ? 'Pedido Cancelado' : order.status === 'finished' ? 'Pedido Entregue!' : 'Acompanhe seu pedido'}
           </h1>
           
-          {order.status !== 'canceled' && order.status !== 'finished' && (
-             <p className="text-slate-500 mb-10">Previsão de entrega: <strong>30-45 min</strong></p>
-          )}
+           {order.status !== 'canceled' && order.status !== 'finished' ? (
+              <p className="text-slate-500 mb-10">Previsão de entrega: <strong>30-45 min</strong></p>
+           ) : order.status === 'finished' ? (
+              <div className="mb-8 flex flex-col gap-1">
+                 <p className="text-green-600 font-bold">Pedido finalizado em {new Date(order.statusHistory?.finished || order.finishedAt || order.updated_at).toLocaleDateString('pt-BR')}</p>
+                 <p className="text-slate-400 text-sm font-medium">Horário da entrega: {new Date(order.statusHistory?.finished || order.finishedAt || order.updated_at).toLocaleTimeString('pt-BR', {hour: '2-digit', minute: '2-digit'})}</p>
+              </div>
+           ) : null}
 
           {order.status === 'canceled' ? (
              <div className="text-red-500 flex flex-col items-center my-6">
@@ -202,13 +214,20 @@ export default function Tracking() {
                 ></div>
 
                 {stepsInfo.map(s => (
-                  <div key={s.num} className="flex flex-col items-center gap-3 w-20">
+                  <div key={s.num} className="flex flex-col items-center gap-2 w-20">
                     <div className={`w-12 h-12 rounded-full flex items-center justify-center transition-colors duration-500 ${step >= s.num ? 'bg-green-500 text-white shadow-lg shadow-green-500/30' : 'bg-slate-100 text-slate-400'}`}>
                       {s.icon}
                     </div>
-                    <span className={`text-xs font-semibold text-center transition-colors ${step >= s.num ? 'text-slate-800' : 'text-slate-400'}`}>
-                      {s.title}
-                    </span>
+                    <div className="flex flex-col items-center">
+                       <span className={`text-[10px] md:text-xs font-bold text-center leading-tight transition-colors ${step >= s.num ? 'text-slate-800' : 'text-slate-400'}`}>
+                         {s.title}
+                       </span>
+                       {formatStatusTime(s.key) && (
+                          <span className={`text-[9px] font-medium mt-0.5 ${step >= s.num ? 'text-green-600' : 'text-slate-300'}`}>
+                             {formatStatusTime(s.key)}
+                          </span>
+                       )}
+                    </div>
                   </div>
                 ))}
               </div>
