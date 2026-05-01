@@ -179,7 +179,7 @@ export default function StoreView() {
                       <div className="flex justify-between items-center mt-auto pt-2">
                         <div className="text-lg font-extrabold text-slate-800">R$ {Number(product.price).toFixed(2).replace('.', ',')}</div>
                         <button 
-                          onClick={() => { if (!storeClosed) addToCart(product); }}
+                          onClick={(e) => { e.stopPropagation(); if (!storeClosed) addToCart(product); }}
                           disabled={storeClosed}
                           title={storeClosed ? 'Loja fechada' : 'Adicionar ao carrinho'}
                           className={`w-9 h-9 rounded-xl border-0 text-xl font-bold flex items-center justify-center transition-all ${storeClosed ? 'bg-slate-100 text-slate-300 cursor-not-allowed' : 'bg-slate-100 hover:bg-[#003B5C] text-slate-600 hover:text-white cursor-pointer active:scale-95 hover:shadow-md hover:shadow-[#003B5C]/30'}`}
