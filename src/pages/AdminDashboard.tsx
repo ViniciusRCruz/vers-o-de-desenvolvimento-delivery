@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Header from '../components/Header';
 import { useAppContext } from '../context/AppContext';
-import { ShieldCheck, Store, MapPin, UserPlus, PackagePlus, Trash2, X, Check, MessageCircle, Send } from 'lucide-react';
+import { ShieldCheck, Store, MapPin, UserPlus, PackagePlus, Trash2, X, Check, MessageCircle, Send, ImagePlus, Link2 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
 export default function AdminDashboard() {
@@ -30,6 +30,10 @@ export default function AdminDashboard() {
   const [existingCategories, setExistingCategories] = useState<string[]>([]);
   const [isCreatingCategory, setIsCreatingCategory] = useState(false);
   const [storeProducts, setStoreProducts] = useState<any[]>([]);
+  const [productImageFile, setProductImageFile] = useState<File | null>(null);
+  const [productImageMode, setProductImageMode] = useState<'url' | 'file'>('file');
+  const [isUploadingProduct, setIsUploadingProduct] = useState(false);
+  const [productImagePreview, setProductImagePreview] = useState<string>('');
   
   // Orders State
   const [storeOrders, setStoreOrders] = useState<any[]>([]);
@@ -116,8 +120,20 @@ export default function AdminDashboard() {
     const finalCategory = isCreatingCategory ? newProduct.newCategory.trim() : newProduct.category;
     if (!finalCategory) { return alert("Por favor, selecione ou digite uma categoria."); }
     
+    setIsUploadingProduct(true);
     try {
-       const prodStruct = { name: newProduct.name, price: Number(newProduct.price), description: newProduct.description, category: finalCategory, image: newProduct.image, marketId: selectedMarketId, isActive: true };
+       let imageUrl = newProduct.image || '';
+
+       // Se o modo for arquivo e tiver um arquivo selecionado, faz upload
+       if (productImageMode === 'file' && productImageFile) {
+          const fileExt = productImageFile.name.split('.').pop();
+          const fileName = `product_${selectedMarketId}_${Date.now()}.${fileExt}`;
+          const { error: uploadError } = await supabase.storage.from('markets').upload(fileName, productImageFile);
+          if (uploadError) throw uploadError;
+          imageUrl = supabase.storage.from('markets').getPublicUrl(fileName).data.publicUrl;
+       }
+
+       const prodStruct = { name: newProduct.name, price: Number(newProduct.price), description: newProduct.description, category: finalCategory, image: imageUrl, marketId: selectedMarketId, isActive: true };
        const { error } = await supabase.from('products').insert([prodStruct]);
        if (error) throw error;
        
@@ -126,10 +142,14 @@ export default function AdminDashboard() {
        setStoreProducts([...storeProducts, createdProduct]);
        setIsAddingProduct(false);
        setNewProduct({ name: '', price: '', description: '', category: finalCategory, newCategory: '', image: '' });
+       setProductImageFile(null);
+       setProductImagePreview('');
        setIsCreatingCategory(false);
        if (!existingCategories.includes(finalCategory)) setExistingCategories([...existingCategories, finalCategory]);
     } catch(err: any) {
-       alert("Erro ao salvar produto.");
+       alert("Erro ao salvar produto: " + (err.message || ''));
+    } finally {
+       setIsUploadingProduct(false);
     }
   }
 
@@ -501,16 +521,80 @@ export default function AdminDashboard() {
                      </button>
                   </div>
                   {isAddingProduct && (
-                      <form onSubmit={handleCreateProduct} className="bg-white p-6 rounded-2xl border border-green-200 shadow-sm grid grid-cols-1 md:grid-cols-2 gap-4">
-                          <input type="text" placeholder="Nome" required className="border p-2 rounded" value={newProduct.name} onChange={e => setNewProduct({...newProduct, name: e.target.value})} />
-                          <input type="number" step="0.01" placeholder="Valor" required className="border p-2 rounded" value={newProduct.price} onChange={e => setNewProduct({...newProduct, price: e.target.value})} />
-                          <select className="border p-2 rounded" value={isCreatingCategory ? 'NEW' : newProduct.category} onChange={e => { e.target.value === 'NEW' ? setIsCreatingCategory(true) : setNewProduct({...newProduct, category: e.target.value, newCategory: ''}); setIsCreatingCategory(e.target.value === 'NEW'); }}>
-                             <option value="" disabled>Categoria</option>
-                             {existingCategories.map(c => <option key={c} value={c}>{c}</option>)}
-                             <option value="NEW">+ Nova</option>
-                          </select>
-                          {isCreatingCategory && <input type="text" placeholder="Nova Categoria" required className="border p-2 rounded" value={newProduct.newCategory} onChange={e => setNewProduct({...newProduct, newCategory: e.target.value})} />}
-                          <button type="submit" className="bg-green-600 text-white p-2 rounded col-span-1 md:col-span-2">Salvar</button>
+                      <form onSubmit={handleCreateProduct} className="bg-white p-6 rounded-2xl border border-green-200 shadow-sm flex flex-col gap-5">
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                             <input type="text" placeholder="Nome do Produto" required className="border border-slate-200 p-2.5 rounded-xl outline-none focus:border-green-500" value={newProduct.name} onChange={e => setNewProduct({...newProduct, name: e.target.value})} />
+                             <input type="number" step="0.01" placeholder="Valor (R$)" required className="border border-slate-200 p-2.5 rounded-xl outline-none focus:border-green-500" value={newProduct.price} onChange={e => setNewProduct({...newProduct, price: e.target.value})} />
+                             <select className="border border-slate-200 p-2.5 rounded-xl outline-none focus:border-green-500 bg-white" value={isCreatingCategory ? 'NEW' : newProduct.category} onChange={e => { e.target.value === 'NEW' ? setIsCreatingCategory(true) : setNewProduct({...newProduct, category: e.target.value, newCategory: ''}); setIsCreatingCategory(e.target.value === 'NEW'); }}>
+                                <option value="" disabled>Categoria</option>
+                                {existingCategories.map(c => <option key={c} value={c}>{c}</option>)}
+                                <option value="NEW">+ Nova Categoria</option>
+                             </select>
+                             {isCreatingCategory && <input type="text" placeholder="Nome da nova categoria" required className="border border-slate-200 p-2.5 rounded-xl outline-none focus:border-green-500" value={newProduct.newCategory} onChange={e => setNewProduct({...newProduct, newCategory: e.target.value})} />}
+                             <input type="text" placeholder="Descrição (opcional)" className="border border-slate-200 p-2.5 rounded-xl outline-none focus:border-green-500 md:col-span-2" value={newProduct.description} onChange={e => setNewProduct({...newProduct, description: e.target.value})} />
+                          </div>
+
+                          {/* Seção de Imagem do Produto */}
+                          <div className="border border-slate-200 rounded-2xl p-4 flex flex-col gap-3">
+                             <div className="flex items-center justify-between">
+                                <span className="text-sm font-bold text-slate-700">Foto do Produto</span>
+                                <div className="flex bg-slate-100 rounded-lg overflow-hidden">
+                                   <button type="button" onClick={() => { setProductImageMode('file'); setNewProduct({...newProduct, image: ''}); }} className={`px-3 py-1.5 text-xs font-bold flex items-center gap-1.5 transition-colors ${productImageMode === 'file' ? 'bg-green-600 text-white' : 'text-slate-500 hover:text-slate-700'}`}>
+                                      <ImagePlus className="w-3.5 h-3.5" /> Enviar Arquivo
+                                   </button>
+                                   <button type="button" onClick={() => { setProductImageMode('url'); setProductImageFile(null); setProductImagePreview(''); }} className={`px-3 py-1.5 text-xs font-bold flex items-center gap-1.5 transition-colors ${productImageMode === 'url' ? 'bg-green-600 text-white' : 'text-slate-500 hover:text-slate-700'}`}>
+                                      <Link2 className="w-3.5 h-3.5" /> URL da Web
+                                   </button>
+                                </div>
+                             </div>
+
+                             <div className="flex gap-4 items-start">
+                                {/* Preview */}
+                                <div className="w-24 h-24 bg-slate-50 rounded-xl border-2 border-dashed border-slate-200 flex items-center justify-center overflow-hidden shrink-0">
+                                   {(productImagePreview || (productImageMode === 'url' && newProduct.image)) ? (
+                                      <img src={productImagePreview || newProduct.image} alt="Preview" className="w-full h-full object-cover rounded-xl" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                                   ) : (
+                                      <ImagePlus className="w-8 h-8 text-slate-300" />
+                                   )}
+                                </div>
+
+                                <div className="flex-1 flex flex-col gap-2">
+                                   {productImageMode === 'file' ? (
+                                      <>
+                                         <label className="flex items-center gap-2 border border-slate-200 rounded-xl px-4 py-2.5 cursor-pointer hover:bg-slate-50 transition-colors">
+                                            <ImagePlus className="w-4 h-4 text-slate-400" />
+                                            <span className="text-sm text-slate-600">{productImageFile ? productImageFile.name : 'Selecionar imagem...'}</span>
+                                            <input type="file" accept="image/png, image/jpeg, image/webp" className="hidden" onChange={(e) => {
+                                               const file = e.target.files?.[0];
+                                               if (file) {
+                                                  setProductImageFile(file);
+                                                  const reader = new FileReader();
+                                                  reader.onloadend = () => setProductImagePreview(reader.result as string);
+                                                  reader.readAsDataURL(file);
+                                               }
+                                            }} />
+                                         </label>
+                                         <span className="text-[10px] text-slate-400">PNG, JPG ou WebP. Recomendado: 500x500px.</span>
+                                      </>
+                                   ) : (
+                                      <>
+                                         <input 
+                                            type="url" 
+                                            placeholder="https://exemplo.com/imagem.jpg" 
+                                            className="border border-slate-200 p-2.5 rounded-xl outline-none focus:border-green-500 text-sm" 
+                                            value={newProduct.image} 
+                                            onChange={e => setNewProduct({...newProduct, image: e.target.value})} 
+                                         />
+                                         <span className="text-[10px] text-slate-400">Cole o link direto de uma imagem da web.</span>
+                                      </>
+                                   )}
+                                </div>
+                             </div>
+                          </div>
+
+                          <button type="submit" disabled={isUploadingProduct} className="bg-green-600 text-white p-3 rounded-xl font-bold hover:bg-green-700 transition-colors disabled:opacity-50 flex items-center justify-center gap-2">
+                             {isUploadingProduct ? 'Salvando...' : 'Salvar Produto'}
+                          </button>
                       </form>
                   )}
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mt-4">
@@ -521,6 +605,14 @@ export default function AdminDashboard() {
                                    MASTER PROMO
                                 </span>
                              )}
+                             {/* Thumbnail do produto */}
+                             <div className="h-24 bg-slate-50 rounded-xl mb-2 overflow-hidden flex items-center justify-center">
+                                {p.image && p.image.startsWith('http') ? (
+                                   <img src={p.image} alt={p.name} className="w-full h-full object-cover" />
+                                ) : (
+                                   <span className="text-3xl text-slate-300">🛍️</span>
+                                )}
+                             </div>
                              <span className="text-[10px] uppercase font-bold text-slate-400 mb-1">{p.category}</span>
                              <span className="font-bold text-slate-800 text-sm leading-tight mb-2 flex-1">{p.name}</span>
                              
