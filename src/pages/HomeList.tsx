@@ -10,7 +10,7 @@ export const MARKET_CATEGORIES = ['Mercado', 'Hortifruti', 'Carnes', 'Bebidas', 
 export default function HomeList() {
   const navigate = useNavigate();
   const { selectedCity, addToCart } = useAppContext();
-  const [activeCategory, setActiveCategory] = useState('Promoções');
+  const [activeCategory, setActiveCategory] = useState('Todos');
   const [allMarkets, setAllMarkets] = useState<any[]>([]);
   const [promoProducts, setPromoProducts] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -63,9 +63,14 @@ export default function HomeList() {
     fetchData();
   }, []);
   
-  const cityMarkets = allMarkets.filter(m => m.cityId === selectedCity.id || m.cityId === selectedCity.name);
-  const cityMarketIds = cityMarkets.map(m => m.id);
-  const cityPromos = promoProducts.filter(p => cityMarketIds.includes(p.marketId));
+   const cityMarkets = allMarkets.filter(m => m.cityId === selectedCity.id || m.cityId === selectedCity.name);
+   const cityMarketIds = cityMarkets.map(m => m.id);
+   const cityPromos = promoProducts.filter(p => cityMarketIds.includes(p.marketId));
+
+   // Categorias que realmente possuem lojas na cidade selecionada
+   const availableCategories = MARKET_CATEGORIES.filter(cat => 
+     cityMarkets.some(m => m.categories && m.categories.includes(cat))
+   );
 
   // Agrupa promos por loja
   const promosByStore = cityPromos.reduce((acc, p) => {
@@ -97,14 +102,13 @@ export default function HomeList() {
           </div>
         </div>
 
-        {/* Categories Pills */}
         <div className="flex gap-4 overflow-x-auto pb-4 hide-scrollbar">
-          {['Promoções', 'Todos', ...MARKET_CATEGORIES].map((cat) => {
+          {['Promoções', ...availableCategories].map((cat) => {
             const isActive = activeCategory === cat;
             return (
               <button 
                 key={cat} 
-                onClick={() => setActiveCategory(cat)}
+                onClick={() => setActiveCategory(isActive ? 'Todos' : cat)}
                 className={`whitespace-nowrap flex items-center gap-2 px-6 py-2.5 rounded-full font-bold text-sm transition-all shadow-sm border ${isActive ? 'bg-[#003B5C] text-white border-[#003B5C]' : 'bg-white text-slate-600 border-slate-200 hover:border-[#003B5C] hover:text-[#003B5C]'}`}
               >
                 {cat === 'Promoções' && <Tag className="w-4 h-4" />}
