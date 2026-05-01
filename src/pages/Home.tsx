@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ArrowRight, ArrowLeft, X, Minus, Plus } from 'lucide-react';
+import { ArrowRight, ArrowLeft, X, Minus, Plus, MapPin, Info } from 'lucide-react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import Header from '../components/Header';
 import { useAppContext } from '../context/AppContext';
@@ -133,7 +133,7 @@ export default function StoreView() {
                   {market.name}
                 </h1>
                 <p className="text-sm md:text-base opacity-95 font-medium drop-shadow-sm">
-                  {storeClosed ? 'Esta loja está fechada no momento.' : 'Os melhores produtos entregues na sua porta.'}
+                  {storeClosed ? 'Esta loja está fechada no momento.' : (market.description || 'Os melhores produtos entregues na sua porta.')}
                 </p>
               </div>
             </div>
@@ -202,6 +202,12 @@ export default function StoreView() {
               <span className="w-2 h-2 bg-[#003B5C] rounded-full shadow-[0_0_8px_rgba(0,59,92,0.6)]"></span>
               Taxa: R$ {market.fee === 0 ? 'Grátis' : Number(market.fee).toFixed(2).replace('.', ',')}
             </div>
+            {market.address && (
+              <div className="flex items-center gap-2.5 text-slate-500">
+                <MapPin className="w-4 h-4 text-[#003B5C] shrink-0" />
+                {market.address}
+              </div>
+            )}
           </div>
         </section>
       </main>

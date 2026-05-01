@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Header from '../components/Header';
 import { useAppContext } from '../context/AppContext';
-import { ShieldCheck, Store, MapPin, UserPlus, PackagePlus, Trash2, X, Check, MessageCircle, Send, ImagePlus, Link2 } from 'lucide-react';
+import { ShieldCheck, Store, MapPin, UserPlus, PackagePlus, Trash2, X, Check, MessageCircle, Send, ImagePlus, Link2, Pencil, FileText } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
 export default function AdminDashboard() {
@@ -15,7 +15,7 @@ export default function AdminDashboard() {
   const MARKET_CATEGORIES = ['Mercado', 'Hortifruti', 'Carnes', 'Bebidas', 'Padaria', 'Limpeza', 'Pet Shop', 'Farmácia', 'Conveniência'];
   const PREDEFINED_CITIES = ['São Paulo, SP', 'Rio de Janeiro, RJ', 'Belo Horizonte, MG', 'Curitiba, PR', 'Campinas, SP']; // Edite aqui com as cidades reais
   
-  const [newMarket, setNewMarket] = useState({ name: '', cityId: PREDEFINED_CITIES[0], deliveryTime: 45, fee: 4, categories: [] as string[] });
+  const [newMarket, setNewMarket] = useState({ name: '', cityId: PREDEFINED_CITIES[0], deliveryTime: 45, fee: 4, categories: [] as string[], description: '', address: '' });
   const [logoFile, setLogoFile] = useState<File | null>(null);
   const [coverFile, setCoverFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
@@ -188,7 +188,9 @@ export default function AdminDashboard() {
          cover: coverUrl,
          deliveryTime: newMarket.deliveryTime,
          fee: newMarket.fee,
-         categories: newMarket.categories.length > 0 ? newMarket.categories : ['Mercado']
+         categories: newMarket.categories.length > 0 ? newMarket.categories : ['Mercado'],
+         description: newMarket.description.trim() || null,
+         address: newMarket.address.trim() || null
        };
        const { data, error } = await supabase.from('markets').insert([marketStruct]).select().single();
        if (error) throw error;
@@ -196,7 +198,7 @@ export default function AdminDashboard() {
        const createdMarket = { ...data, rating: 5.0 };
        if(updateAdminMarkets) updateAdminMarkets([...adminMarkets, createdMarket]);
        setIsAddingMarket(false);
-       setNewMarket({ name: '', cityId: PREDEFINED_CITIES[0], deliveryTime: 45, fee: 4, categories: [] });
+       setNewMarket({ name: '', cityId: PREDEFINED_CITIES[0], deliveryTime: 45, fee: 4, categories: [], description: '', address: '' });
        setLogoFile(null);
        setCoverFile(null);
     } catch(err: any) {
@@ -496,6 +498,40 @@ export default function AdminDashboard() {
                            </button>
                         </div>
                         
+                        {/* Descrição e Endereço editáveis inline */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                           <div className="bg-slate-50 rounded-xl p-3 border border-slate-100">
+                              <div className="flex items-center justify-between mb-1">
+                                 <span className="text-[10px] uppercase font-bold text-slate-400 flex items-center gap-1"><FileText className="w-3 h-3" /> Descrição</span>
+                                 <button 
+                                    onClick={async () => {
+                                       const val = window.prompt('Descrição da loja:', market.description || '');
+                                       if (val === null) return;
+                                       const { error } = await supabase.from('markets').update({ description: val.trim() || null }).eq('id', market.id);
+                                       if (!error && updateAdminMarkets) updateAdminMarkets(adminMarkets.map((m: any) => m.id === market.id ? {...m, description: val.trim() || null} : m));
+                                    }}
+                                    className="text-[10px] text-blue-600 font-bold hover:underline flex items-center gap-0.5"
+                                 ><Pencil className="w-3 h-3" /> Editar</button>
+                              </div>
+                              <p className="text-xs text-slate-600 line-clamp-2">{market.description || <span className="text-slate-300 italic">Sem descrição</span>}</p>
+                           </div>
+                           <div className="bg-slate-50 rounded-xl p-3 border border-slate-100">
+                              <div className="flex items-center justify-between mb-1">
+                                 <span className="text-[10px] uppercase font-bold text-slate-400 flex items-center gap-1"><MapPin className="w-3 h-3" /> Endereço</span>
+                                 <button 
+                                    onClick={async () => {
+                                       const val = window.prompt('Endereço da loja:', market.address || '');
+                                       if (val === null) return;
+                                       const { error } = await supabase.from('markets').update({ address: val.trim() || null }).eq('id', market.id);
+                                       if (!error && updateAdminMarkets) updateAdminMarkets(adminMarkets.map((m: any) => m.id === market.id ? {...m, address: val.trim() || null} : m));
+                                    }}
+                                    className="text-[10px] text-blue-600 font-bold hover:underline flex items-center gap-0.5"
+                                 ><Pencil className="w-3 h-3" /> Editar</button>
+                              </div>
+                              <p className="text-xs text-slate-600 line-clamp-2">{market.address || <span className="text-slate-300 italic">Sem endereço</span>}</p>
+                           </div>
+                        </div>
+                        
                         <div className="flex gap-2 text-xs text-slate-400">
                            <span className="bg-slate-50 px-2 py-1 rounded">{market.categories?.join(', ') || 'Sem categorias'}</span>
                         </div>
@@ -730,6 +766,10 @@ export default function AdminDashboard() {
                               {PREDEFINED_CITIES.map(city => <option key={city} value={city}>{city}</option>)}
                            </select>
                            
+                           <textarea placeholder="Descrição da loja (visível para o cliente)" className="border p-2 rounded resize-none h-16 md:col-span-2" value={newMarket.description} onChange={e => setNewMarket({...newMarket, description: e.target.value})} maxLength={300} />
+                           
+                           <input type="text" placeholder="Endereço da loja (Rua, Número, Bairro)" className="border p-2 rounded md:col-span-2" value={newMarket.address} onChange={e => setNewMarket({...newMarket, address: e.target.value})} />
+
                            <div className="flex flex-col gap-1">
                               <label className="text-xs font-bold text-slate-600">Logo (Recomendado: 500x500px, 1:1)</label>
                               <input type="file" accept="image/png, image/jpeg" className="border p-1.5 rounded text-sm bg-slate-50" onChange={e => setLogoFile(e.target.files?.[0] || null)} />
