@@ -12,6 +12,17 @@ export default function Tracking() {
   const [loading, setLoading] = useState(true);
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [chatMessage, setChatMessage] = useState('');
+  const chatEndRef = useRef<HTMLDivElement>(null);
+
+  const scrollToBottom = () => {
+    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
+
+  useEffect(() => {
+    if (isChatOpen) {
+      scrollToBottom();
+    }
+  }, [isChatOpen, order?.chat]);
   
   // Review state
   const [showReview, setShowReview] = useState(false);
@@ -104,15 +115,25 @@ export default function Tracking() {
       e.preventDefault();
       if (!order || !chatMessage.trim()) return;
       
-      const newMsg = { sender: 'customer', text: chatMessage.trim(), time: new Date().toISOString() };
-      const updatedChat = [...(order.chat || []), newMsg];
+      const text = chatMessage.trim();
+      setChatMessage('');
+
+      const newMsg = { sender: 'customer', text: text, time: new Date().toISOString() };
       
+      // Atualização Otimista local
+      const optimisticChat = [...(order.chat || []), newMsg];
+      setOrder({ ...order, chat: optimisticChat });
+
       try {
-          const { error } = await supabase.from('orders').update({ chat: updatedChat }).eq('id', order.id);
+          // Busca a versão mais recente do chat antes de salvar para evitar sobrescrever mensagens do lojista
+          const { data: latestOrder } = await supabase.from('orders').select('chat').eq('id', order.id).single();
+          const finalChat = [...(latestOrder?.chat || []), newMsg];
+          
+          const { error } = await supabase.from('orders').update({ chat: finalChat }).eq('id', order.id);
           if (error) throw error;
-          setChatMessage('');
       } catch (err) {
-          alert("Erro ao enviar mensagem.");
+          alert("Erro ao enviar mensagem. Tente novamente.");
+          // Opcional: reverter estado em caso de erro crítico
       }
   };
 
@@ -380,15 +401,20 @@ export default function Tracking() {
                <div className="flex-1 p-4 overflow-y-auto flex flex-col gap-3 bg-slate-50/50">
                   {(!order.chat || order.chat.length === 0) ? (
                       <div className="text-center text-slate-400 text-sm mt-10">
-                          Envie uma mensagem apenas se houver algum problema ou instrução importante para a loja.
+                          Diga algo para a loja para iniciar a conversa sobre seu pedido.
                       </div>
                   ) : (
-                      order.chat.map((msg: any, i: number) => (
-                         <div key={i} className={`max-w-[80%] p-3 rounded-2xl text-sm ${msg.sender === 'customer' ? 'bg-blue-100 text-blue-900 self-end rounded-br-sm' : 'bg-white border border-slate-200 text-slate-800 self-start rounded-bl-sm'}`}>
-                             {msg.text}
-                             <div className="text-[10px] opacity-50 text-right mt-1">{new Date(msg.time).toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'})}</div>
-                         </div>
-                      ))
+                      <>
+                        {order.chat.map((msg: any, i: number) => (
+                           <div key={i} className={`max-w-[80%] p-3 rounded-2xl text-sm shadow-sm ${msg.sender === 'customer' ? 'bg-blue-600 text-white self-end rounded-br-sm' : 'bg-white border border-slate-200 text-slate-800 self-start rounded-bl-sm'}`}>
+                               {msg.text}
+                               <div className={`text-[10px] opacity-70 text-right mt-1 ${msg.sender === 'customer' ? 'text-blue-100' : 'text-slate-400'}`}>
+                                  {new Date(msg.time).toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'})}
+                               </div>
+                           </div>
+                        ))}
+                        <div ref={chatEndRef} />
+                      </>
                   )}
                </div>
                <form onSubmit={handleSendChatMessage} className="p-3 bg-white border-t border-slate-100 flex gap-2">

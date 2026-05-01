@@ -36,6 +36,17 @@ export default function AdminDashboard() {
   const [activeChatOrder, setActiveChatOrder] = useState<any | null>(null);
   const [chatMessage, setChatMessage] = useState('');
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const chatEndRef = useRef<HTMLDivElement>(null);
+
+  const scrollToBottom = () => {
+    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
+
+  useEffect(() => {
+    if (activeChatOrder) {
+      scrollToBottom();
+    }
+  }, [activeChatOrder?.chat, activeChatOrder?.id]);
 
   useEffect(() => {
     // Inicializa o som de notificação
@@ -293,13 +304,22 @@ export default function AdminDashboard() {
       e.preventDefault();
       if (!activeChatOrder || !chatMessage.trim()) return;
       
-      const newMsg = { sender: 'store', text: chatMessage.trim(), time: new Date().toISOString() };
-      const updatedChat = [...(activeChatOrder.chat || []), newMsg];
+      const text = chatMessage.trim();
+      setChatMessage('');
+
+      const newMsg = { sender: 'store', text: text, time: new Date().toISOString() };
       
+      // Atualização Otimista local
+      const optimisticChat = [...(activeChatOrder.chat || []), newMsg];
+      setActiveChatOrder({ ...activeChatOrder, chat: optimisticChat });
+
       try {
-          const { error } = await supabase.from('orders').update({ chat: updatedChat }).eq('id', activeChatOrder.id);
+          // Busca a versão mais recente para evitar sobrescrever mensagens do cliente
+          const { data: latestOrder } = await supabase.from('orders').select('chat').eq('id', activeChatOrder.id).single();
+          const finalChat = [...(latestOrder?.chat || []), newMsg];
+          
+          const { error } = await supabase.from('orders').update({ chat: finalChat }).eq('id', activeChatOrder.id);
           if (error) throw error;
-          setChatMessage('');
       } catch (err) {
           alert("Erro ao enviar mensagem.");
       }
@@ -737,12 +757,17 @@ export default function AdminDashboard() {
                     {(!activeChatOrder.chat || activeChatOrder.chat.length === 0) ? (
                         <div className="text-center text-slate-400 text-sm mt-10">Nenhuma mensagem ainda.</div>
                     ) : (
-                        activeChatOrder.chat.map((msg: any, i: number) => (
-                           <div key={i} className={`max-w-[80%] p-3 rounded-2xl text-sm ${msg.sender === 'store' ? 'bg-green-100 text-green-900 self-end rounded-br-sm' : 'bg-white border border-slate-200 text-slate-800 self-start rounded-bl-sm'}`}>
-                               {msg.text}
-                               <div className="text-[10px] opacity-50 text-right mt-1">{new Date(msg.time).toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'})}</div>
-                           </div>
-                        ))
+                        <>
+                           {activeChatOrder.chat.map((msg: any, i: number) => (
+                              <div key={i} className={`max-w-[80%] p-3 rounded-2xl text-sm shadow-sm ${msg.sender === 'store' ? 'bg-green-600 text-white self-end rounded-br-sm' : 'bg-white border border-slate-200 text-slate-800 self-start rounded-bl-sm'}`}>
+                                  {msg.text}
+                                  <div className={`text-[10px] opacity-70 text-right mt-1 ${msg.sender === 'store' ? 'text-green-50' : 'text-slate-400'}`}>
+                                     {new Date(msg.time).toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'})}
+                                  </div>
+                              </div>
+                           ))}
+                           <div ref={chatEndRef} />
+                        </>
                     )}
                  </div>
                  <form onSubmit={handleSendChatMessage} className="p-3 bg-white border-t border-slate-100 flex gap-2">
