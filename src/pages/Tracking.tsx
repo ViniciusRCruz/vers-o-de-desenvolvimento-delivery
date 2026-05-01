@@ -29,6 +29,13 @@ export default function Tracking() {
        const { data, error } = await supabase.from('orders').select('*').eq('id', id).single();
        if (data) {
           setOrder(data);
+
+          // Abrir chat automaticamente se solicitado via URL
+          const urlParams = new URLSearchParams(window.location.search);
+          if (urlParams.get('chat') === 'true') {
+             setIsChatOpen(true);
+          }
+          
           // Check if already reviewed
           if (data.status === 'finished') {
              const { data: rev } = await supabase.from('reviews').select('*').eq('orderId', id).single();
@@ -154,20 +161,23 @@ export default function Tracking() {
 
         <div className="bg-white rounded-3xl p-8 shadow-sm border border-slate-100 text-center flex flex-col items-center relative overflow-hidden">
           
-          <div className="flex gap-2 mb-6">
+           <div className="flex gap-2 mb-6">
               <div className="bg-green-50 text-green-600 px-4 py-1.5 rounded-full text-sm font-bold border border-green-100">
                 Pedido #{order.id.split('-')[0]}
               </div>
               
-              <button 
-                onClick={() => setIsChatOpen(true)}
-                className="bg-blue-50 text-blue-600 px-4 py-1.5 rounded-full text-sm font-bold border border-blue-100 flex items-center gap-2 hover:bg-blue-100 transition-colors relative"
-              >
-                 <MessageCircle className="w-4 h-4" /> Falar com a Loja
-                 {order.chat && order.chat.length > 0 && order.chat[order.chat.length-1].sender === 'store' && (
-                     <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white"></span>
-                 )}
-              </button>
+              {/* Contato disponível apenas por 24h */}
+              {order.createdAt && (new Date().getTime() - new Date(order.createdAt).getTime()) < 24 * 60 * 60 * 1000 && (
+                <button 
+                  onClick={() => setIsChatOpen(true)}
+                  className="bg-blue-50 text-blue-600 px-4 py-1.5 rounded-full text-sm font-bold border border-blue-100 flex items-center gap-2 hover:bg-blue-100 transition-colors relative"
+                >
+                   <MessageCircle className="w-4 h-4" /> Falar com a Loja
+                   {order.chat && order.chat.length > 0 && order.chat[order.chat.length-1].sender === 'store' && (
+                       <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white"></span>
+                   )}
+                </button>
+              )}
           </div>
           
           <h1 className="text-2xl font-bold text-slate-800 mb-2">

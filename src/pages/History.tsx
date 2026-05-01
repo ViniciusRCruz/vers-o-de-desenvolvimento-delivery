@@ -1,7 +1,7 @@
 import React from 'react';
 import Header from '../components/Header';
 import { useAppContext } from '../context/AppContext';
-import { Clock, RefreshCcw, ArrowLeft, Store } from 'lucide-react';
+import { Clock, RefreshCcw, ArrowLeft, Store, MessageCircle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 export default function History() {
@@ -75,6 +75,17 @@ export default function History() {
                   >
                     Acompanhar / Detalhes
                   </button>
+                  
+                  {/* Botão de Contato rápido - disponível apenas por 24h */}
+                  {order.createdAt && (new Date().getTime() - new Date(order.createdAt).getTime()) < 24 * 60 * 60 * 1000 && (
+                    <button 
+                      onClick={() => navigate(`/tracking/${order.id}?chat=true`)}
+                      className="flex-1 bg-blue-50 text-blue-700 px-6 py-2.5 rounded-xl font-bold text-sm flex items-center justify-center gap-2 hover:bg-blue-100 transition-colors"
+                    >
+                      <MessageCircle className="w-4 h-4" /> Falar com a Loja
+                    </button>
+                  )}
+
                   <button 
                     onClick={() => handleReorder(order.items)}
                     className="flex-1 bg-green-50 text-green-700 px-6 py-2.5 rounded-xl font-bold text-sm flex items-center justify-center gap-2 hover:bg-green-100 transition-colors"
