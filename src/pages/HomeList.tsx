@@ -149,8 +149,12 @@ export default function HomeList() {
                                 onClick={() => navigate(`/store/${market.id}`)}
                               >
                                   <div className="flex items-center gap-3">
-                                     <div className="w-10 h-10 bg-slate-50 rounded-xl flex items-center justify-center text-2xl group-hover:scale-110 transition-transform">
-                                        {market.img}
+                                     <div className="w-10 h-10 bg-slate-50 rounded-xl flex items-center justify-center text-2xl group-hover:scale-110 transition-transform overflow-hidden">
+                                        {market.img && market.img.startsWith('http') ? (
+                                           <img src={market.img} alt={market.name} className="w-full h-full object-cover" />
+                                        ) : (
+                                           market.img || '🏪'
+                                        )}
                                      </div>
                                      <h3 className="font-bold text-lg text-slate-800 group-hover:text-[#003B5C] transition-colors">{market.name}</h3>
                                   </div>
@@ -212,8 +216,12 @@ export default function HomeList() {
                              </div>
                           )}
                           <div className="flex gap-4 items-center border-b border-slate-100 pb-4">
-                            <div className="w-16 h-16 bg-slate-50 rounded-2xl flex items-center justify-center text-4xl shadow-inner group-hover:scale-105 transition-transform">
-                              {market.img}
+                            <div className="w-16 h-16 bg-slate-50 rounded-2xl flex items-center justify-center text-4xl shadow-inner group-hover:scale-105 transition-transform overflow-hidden shrink-0">
+                              {market.img && market.img.startsWith('http') ? (
+                                 <img src={market.img} alt={market.name} className="w-full h-full object-cover" />
+                              ) : (
+                                 market.img || '🏪'
+                              )}
                             </div>
                             <div className="flex-1">
                               <h3 className={`font-bold text-lg transition-colors ${isClosed ? 'text-slate-500' : 'text-slate-800 group-hover:text-[#003B5C]'}`}>{market.name}</h3>
