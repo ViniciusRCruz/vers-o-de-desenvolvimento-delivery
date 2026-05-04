@@ -4,9 +4,12 @@ import Header from '../components/Header';
 import { Truck, PackageCheck, CookingPot, CheckCircle2, ArrowLeft, XCircle, MapPin, CreditCard, MessageCircle, HeadphonesIcon, Send, X, Star } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
+import { useDialog } from '../context/DialogContext';
+
 export default function Tracking() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { showAlert, showConfirm } = useDialog();
   
   const [order, setOrder] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -76,23 +79,23 @@ export default function Tracking() {
   }, [id]);
 
   const handleConfirmDelivery = async () => {
-      if(!window.confirm("Confirmar que você recebeu este pedido?")) return;
+      if(!(await showConfirm("Confirmar que você recebeu este pedido?"))) return;
       try {
           const { error } = await supabase.from('orders').update({ status: 'finished' }).eq('id', id);
           if(error) throw error;
       } catch (e) {
-          alert("Erro ao confirmar entrega.");
+          await showAlert("Erro ao confirmar entrega.", "error");
       }
   };
 
   const handleSubmitReview = async () => {
-      if (reviewRating === 0) return alert('Por favor, selecione uma nota de 1 a 5 estrelas.');
+      if (reviewRating === 0) { await showAlert('Por favor, selecione uma nota de 1 a 5 estrelas.', 'warning'); return; }
       if (!order) return;
       
       try {
           const { data: session } = await supabase.auth.getSession();
           const userId = session?.session?.user?.id;
-          if (!userId) return alert('Você precisa estar logado.');
+          if (!userId) { await showAlert('Você precisa estar logado.', 'error'); return; }
           
           const { error } = await supabase.from('reviews').insert([{
               orderId: order.id,
@@ -107,7 +110,7 @@ export default function Tracking() {
           setShowReview(false);
           setExistingReview({ rating: reviewRating, comment: reviewComment.trim() });
       } catch (err: any) {
-          alert('Erro ao enviar avaliação: ' + (err.message || ''));
+          await showAlert('Erro ao enviar avaliação: ' + (err.message || ''), 'error');
       }
   };
 
@@ -132,7 +135,7 @@ export default function Tracking() {
           const { error } = await supabase.from('orders').update({ chat: finalChat }).eq('id', order.id);
           if (error) throw error;
       } catch (err) {
-          alert("Erro ao enviar mensagem. Tente novamente.");
+          await showAlert("Erro ao enviar mensagem. Tente novamente.", "error");
           // Opcional: reverter estado em caso de erro crítico
       }
   };

@@ -2,25 +2,27 @@ import React, { useState } from 'react';
 import { useAppContext } from '../context/AppContext';
 import { useNavigate } from 'react-router-dom';
 import Header from '../components/Header';
-import { MapPin, CreditCard, Banknote, Wallet, ArrowLeft, Trash2, Plus, Minus } from 'lucide-react';
+import { Plus, Minus } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { useDialog } from '../context/DialogContext';
 
 export default function Checkout() {
   const { cart, cartTotal, removeFromCart, updateQuantity, clearCart, addOrder, userProfile, currentUser } = useAppContext();
   const navigate = useNavigate();
+  const { showAlert } = useDialog();
   const [paymentMethod, setPaymentMethod] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
 
   const activeAddress = userProfile?.addresses?.find((a: any) => a.id === userProfile?.activeAddressId) || userProfile?.addresses?.[0];
 
   const handleFinishOrder = async () => {
-    if (!paymentMethod) return alert('Selecione uma forma de pagamento');
+    if (!paymentMethod) { await showAlert('Selecione uma forma de pagamento', 'warning'); return; }
     if (!activeAddress) {
-       alert('Nenhum endereço de entrega selecionado. Por favor, complete seu perfil.');
+       await showAlert('Nenhum endereço de entrega selecionado. Por favor, complete seu perfil.', 'warning');
        return navigate('/auth');
     }
     if (!currentUser) {
-       alert('Você precisa estar logado para fazer o pedido.');
+       await showAlert('Você precisa estar logado para fazer o pedido.', 'error');
        return navigate('/auth');
     }
     
@@ -53,7 +55,7 @@ export default function Checkout() {
       navigate(`/tracking/${data.id}`);
     } catch (err: any) {
       console.error(err);
-      alert("Erro ao finalizar pedido: " + (err.message || 'Erro desconhecido.'));
+      await showAlert("Erro ao finalizar pedido: " + (err.message || 'Erro desconhecido.'), 'error');
       setIsProcessing(false);
     }
   };

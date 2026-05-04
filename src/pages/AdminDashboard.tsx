@@ -1,11 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Header from '../components/Header';
+import { useDialog } from '../context/DialogContext';
 import { useAppContext } from '../context/AppContext';
 import { ShieldCheck, Store, MapPin, UserPlus, PackagePlus, Trash2, X, Check, MessageCircle, Send, ImagePlus, Link2, Pencil, FileText } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
 export default function AdminDashboard() {
+  const { showAlert, showConfirm, showPrompt } = useDialog();
   const { isLoggedIn, isSystemAdmin, adminMarkets, currentUser, updateAdminMarkets, isAdminDataLoaded } = useAppContext();
   const navigate = useNavigate();
   const [activeTab, setActiveTab] = useState<'markets' | 'products' | 'orders' | 'system'>('markets');
@@ -125,7 +127,7 @@ export default function AdminDashboard() {
     if(!selectedMarketId || !currentUser) return;
     
     const finalCategory = isCreatingCategory ? newProduct.newCategory.trim() : newProduct.category;
-    if (!finalCategory) { return alert("Por favor, selecione ou digite uma categoria."); }
+    if (!finalCategory) { return await showAlert("Por favor, selecione ou digite uma categoria."); }
     
     setIsUploadingProduct(true);
     try {
@@ -144,7 +146,7 @@ export default function AdminDashboard() {
        const { error } = await supabase.from('products').insert([prodStruct]);
        if (error) throw error;
        
-       alert(`Produto salvo com sucesso!`);
+       await showAlert(`Produto salvo com sucesso!`);
        const createdProduct = { ...prodStruct, id: Math.random().toString() };
        setStoreProducts([...storeProducts, createdProduct]);
        setIsAddingProduct(false);
@@ -154,7 +156,7 @@ export default function AdminDashboard() {
        setIsCreatingCategory(false);
        if (!existingCategories.includes(finalCategory)) setExistingCategories([...existingCategories, finalCategory]);
     } catch(err: any) {
-       alert("Erro ao salvar produto: " + (err.message || ''));
+       await showAlert("Erro ao salvar produto: " + (err.message || ''));
     } finally {
        setIsUploadingProduct(false);
     }
@@ -165,7 +167,7 @@ export default function AdminDashboard() {
     if(!editingProduct || !selectedMarketId) return;
 
     const finalCategory = editIsCreatingCategory ? editingProduct.newCategory?.trim() : editingProduct.category;
-    if (!finalCategory) return alert("Por favor, selecione ou digite uma categoria.");
+    if (!finalCategory) return await showAlert("Por favor, selecione ou digite uma categoria.");
 
     setIsSavingEdit(true);
     try {
@@ -191,7 +193,7 @@ export default function AdminDashboard() {
       const { error } = await supabase.from('products').update(updateData).eq('id', editingProduct.id);
       if (error) throw error;
 
-      alert("Produto atualizado com sucesso!");
+      await showAlert("Produto atualizado com sucesso!");
       setStoreProducts(prev => prev.map(p => p.id === editingProduct.id ? { ...p, ...updateData } : p));
       setEditingProduct(null);
       setEditProductImageFile(null);
@@ -201,7 +203,7 @@ export default function AdminDashboard() {
         setExistingCategories(prev => [...prev, finalCategory]);
       }
     } catch (err: any) {
-      alert("Erro ao atualizar produto: " + (err.message || ''));
+      await showAlert("Erro ao atualizar produto: " + (err.message || ''));
     } finally {
       setIsSavingEdit(false);
     }
@@ -259,7 +261,7 @@ export default function AdminDashboard() {
        setCoverFile(null);
     } catch(err: any) {
        console.error("Erro ao criar mercado:", err);
-       alert("Erro ao criar mercado. Verifique o console para mais detalhes.");
+       await showAlert("Erro ao criar mercado. Verifique o console para mais detalhes.");
     } finally {
        setIsUploading(false);
     }
@@ -267,7 +269,7 @@ export default function AdminDashboard() {
 
   const handleDeleteMarket = async (marketId: string) => {
      if(!isSystemAdmin) return;
-     if(window.confirm('Excluir esta loja?')) {
+     if(await showConfirm('Excluir esta loja?')) {
         const { error } = await supabase.from('markets').delete().eq('id', marketId);
         if (!error && updateAdminMarkets) updateAdminMarkets(adminMarkets.filter(m => m.id !== marketId));
      }
@@ -288,13 +290,13 @@ export default function AdminDashboard() {
            
            if (!error && updateAdminMarkets) {
               updateAdminMarkets(adminMarkets.map(m => m.id === market.id ? {...m, ...updatePayload} : m));
-              alert(`${type === 'logo' ? 'Logo' : 'Capa'} atualizada com sucesso!`);
+              await showAlert(`${type === 'logo' ? 'Logo' : 'Capa'} atualizada com sucesso!`);
            } else {
               throw error;
            }
       } catch(err) {
            console.error(err);
-           alert("Erro ao atualizar imagem.");
+           await showAlert("Erro ao atualizar imagem.");
       } finally {
            setIsUpdatingImage(null);
       }
@@ -302,55 +304,55 @@ export default function AdminDashboard() {
 
   const handleUpdateMarketFee = async (market: any) => {
       if (!isSystemAdmin) return;
-      const val = window.prompt(`Definir nova taxa de entrega para [${market.name}]? (Atual: R$ ${Number(market.fee || 0).toFixed(2).replace('.', ',')})`);
+      const val = await showPrompt(`Definir nova taxa de entrega para [${market.name}]? (Atual: R$ ${Number(market.fee || 0).toFixed(2).replace('.', ',')})`);
       if (val === null) return;
       const num = parseFloat(val.replace(',', '.'));
       if (isNaN(num) || num < 0) {
-         alert("Valor inválido.");
+         await showAlert("Valor inválido.");
          return;
       }
       const { error } = await supabase.from('markets').update({ fee: num }).eq('id', market.id);
       if (!error && updateAdminMarkets) {
          updateAdminMarkets(adminMarkets.map(m => m.id === market.id ? {...m, fee: num} : m));
-         alert("Taxa atualizada com sucesso!");
+         await showAlert("Taxa atualizada com sucesso!");
       } else {
-         alert("Erro ao atualizar taxa.");
+         await showAlert("Erro ao atualizar taxa.");
       }
   };
 
   const handleDeleteProduct = async (productId: string) => {
-     if(window.confirm('Excluir este produto?')) {
+     if(await showConfirm('Excluir este produto?')) {
         const { error } = await supabase.from('products').delete().eq('id', productId);
         if (!error) setStoreProducts(storeProducts.filter(p => p.id !== productId));
      }
   };
 
   const handleSetPromotion = async (p: any) => {
-      const val = window.prompt(`Definir preço promocional da Loja para [${p.name}]? (Preço original: R$ ${p.price}). Deixe em branco para remover a promoção.`);
+      const val = await showPrompt(`Definir preço promocional da Loja para [${p.name}]? (Preço original: R$ ${p.price}). Deixe em branco para remover a promoção.`);
       if (val === null) return;
       const num = parseFloat(val.replace(',', '.'));
       const promo = isNaN(num) ? null : num;
       const { error } = await supabase.from('products').update({ promotionalPrice: promo }).eq('id', p.id);
       if (!error) {
          setStoreProducts(storeProducts.map(prod => prod.id === p.id ? {...prod, promotionalPrice: promo} : prod));
-         alert("Promoção atualizada com sucesso!");
+         await showAlert("Promoção atualizada com sucesso!");
       } else {
-         alert("Erro ao atualizar promoção.");
+         await showAlert("Erro ao atualizar promoção.");
       }
   };
 
   const handleSetPlatformDiscount = async (p: any) => {
       if (!isSystemAdmin) return;
-      const val = window.prompt(`[MASTER] Definir desconto subsidiado pela Plataforma para [${p.name}]? (Ex: 5.00 será abatido do valor final, mas a loja recebe integral). Deixe em branco para remover.`);
+      const val = await showPrompt(`[MASTER] Definir desconto subsidiado pela Plataforma para [${p.name}]? (Ex: 5.00 será abatido do valor final, mas a loja recebe integral). Deixe em branco para remover.`);
       if (val === null) return;
       const num = parseFloat(val.replace(',', '.'));
       const promo = isNaN(num) ? null : num;
       const { error } = await supabase.from('products').update({ platformDiscount: promo }).eq('id', p.id);
       if (!error) {
          setStoreProducts(storeProducts.map(prod => prod.id === p.id ? {...prod, platformDiscount: promo} : prod));
-         alert("Desconto da plataforma atualizado com sucesso!");
+         await showAlert("Desconto da plataforma atualizado com sucesso!");
       } else {
-         alert("Erro ao atualizar desconto da plataforma.");
+         await showAlert("Erro ao atualizar desconto da plataforma.");
       }
   };
 
@@ -373,7 +375,7 @@ export default function AdminDashboard() {
           setStoreOrders(prev => prev.map(o => o.id === orderId ? { ...o, status: newStatus, statusHistory: updatedHistory } : o));
        } catch (err: any) {
           console.error(err);
-          alert("Erro ao atualizar status do pedido: " + err.message);
+          await showAlert("Erro ao atualizar status do pedido: " + err.message);
        }
    };
 
@@ -398,7 +400,7 @@ export default function AdminDashboard() {
           const { error } = await supabase.from('orders').update({ chat: finalChat }).eq('id', activeChatOrder.id);
           if (error) throw error;
       } catch (err) {
-          alert("Erro ao enviar mensagem.");
+          await showAlert("Erro ao enviar mensagem.");
       }
   };
 
@@ -560,7 +562,7 @@ export default function AdminDashboard() {
                                  <span className="text-[10px] uppercase font-bold text-slate-400 flex items-center gap-1"><FileText className="w-3 h-3" /> Descrição</span>
                                  <button 
                                     onClick={async () => {
-                                       const val = window.prompt('Descrição da loja:', market.description || '');
+                                       const val = await showPrompt('Descrição da loja:', market.description || '');
                                        if (val === null) return;
                                        const { error } = await supabase.from('markets').update({ description: val.trim() || null }).eq('id', market.id);
                                        if (!error && updateAdminMarkets) updateAdminMarkets(adminMarkets.map((m: any) => m.id === market.id ? {...m, description: val.trim() || null} : m));
@@ -575,7 +577,7 @@ export default function AdminDashboard() {
                                  <span className="text-[10px] uppercase font-bold text-slate-400 flex items-center gap-1"><MapPin className="w-3 h-3" /> Endereço</span>
                                  <button 
                                     onClick={async () => {
-                                       const val = window.prompt('Endereço da loja:', market.address || '');
+                                       const val = await showPrompt('Endereço da loja:', market.address || '');
                                        if (val === null) return;
                                        const { error } = await supabase.from('markets').update({ address: val.trim() || null }).eq('id', market.id);
                                        if (!error && updateAdminMarkets) updateAdminMarkets(adminMarkets.map((m: any) => m.id === market.id ? {...m, address: val.trim() || null} : m));
