@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { Product, CartItem, Order, CITIES } from '../data/mockData';
 import { supabase } from '../lib/supabase';
+import CartConflictModal from '../components/CartConflictModal';
 
 interface City { id: string; name: string; }
 
@@ -42,6 +43,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [isSystemAdmin, setIsSystemAdmin] = useState(false);
   const [adminMarkets, setAdminMarkets] = useState<any[]>([]);
   const [isAdminDataLoaded, setIsAdminDataLoaded] = useState(false);
+
+  // Cart Conflict State
+  const [conflictModalOpen, setConflictModalOpen] = useState(false);
+  const [pendingItem, setPendingItem] = useState<{product: Product, qty: number, observation?: string} | null>(null);
+  const [newStoreName, setNewStoreName] = useState('');
 
   const [selectedCity, setSelectedCityState] = useState<City>(() => {
     const saved = localStorage.getItem('app_city');
@@ -134,7 +140,34 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
      supabase.auth.signOut();
   };
 
-  const addToCart = (product: Product, qty: number = 1, observation?: string) => {
+  const addToCart = (product: Product, qty: number = 1, observation?: string): boolean => {
+    // Bloqueio multi-loja: verifica se o carrinho já tem itens de outra loja
+    const productMarketId = product.marketId;
+    
+    if (productMarketId && cart.length > 0) {
+      const currentMarketId = cart[0].marketId;
+      
+      if (currentMarketId && currentMarketId !== productMarketId) {
+        // Tentativa de adicionar de outra loja
+        setPendingItem({ product, qty, observation });
+        
+        // Tenta buscar o nome da loja para o modal (opcional, melhora UX)
+        const fetchStoreName = async () => {
+          const { data } = await supabase.from('markets').select('name').eq('id', productMarketId).single();
+          if (data) setNewStoreName(data.name);
+          setConflictModalOpen(true);
+        };
+        fetchStoreName();
+        
+        return false;
+      }
+    }
+
+    executeAddToCart(product, qty, observation);
+    return true;
+  };
+
+  const executeAddToCart = (product: Product, qty: number, observation?: string) => {
     setCart(prev => {
       // Items with observations are always unique lines
       const cartKey = observation ? `${product.id}_obs_${Date.now()}` : product.id;
@@ -147,6 +180,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }
       return [...prev, { ...product, id: cartKey, originalId: product.id, qty, observation: observation || '' }];
     });
+  };
+
+  const handleConfirmConflict = () => {
+    if (pendingItem) {
+      setCart([]);
+      executeAddToCart(pendingItem.product, pendingItem.qty, pendingItem.observation);
+      setPendingItem(null);
+      setConflictModalOpen(false);
+    }
   };
 
   const removeFromCart = (productId: string) => {
@@ -180,6 +222,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       isSystemAdmin, adminMarkets, updateAdminMarkets: setAdminMarkets, isAdminDataLoaded
     }}>
       {children}
+      
+      <CartConflictModal 
+        isOpen={conflictModalOpen}
+        onClose={() => { setConflictModalOpen(false); setPendingItem(null); }}
+        onConfirm={handleConfirmConflict}
+        newStoreName={newStoreName}
+      />
     </AppContext.Provider>
   );
 }

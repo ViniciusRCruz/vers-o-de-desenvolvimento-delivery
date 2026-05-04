@@ -1,7 +1,19 @@
-export interface Product { id: string; name: string; category: string; price: number; unit: string; img: string; }
-export interface Market { id: string; name: string; rating: number; deliveryTime: string; fee: number; img: string; categories: string[]; cityId: string; }
-export interface CartItem extends Product { qty: number; observation?: string; originalId?: string; }
-export interface Order { id: string; date: string; total: number; status: 'Recebido' | 'Em separação' | 'Em entrega' | 'Entregue'; items: CartItem[]; marketName: string; }
+export interface Product { 
+  id: string; 
+  name: string; 
+  category: string; 
+  price: number; 
+  unit: string; 
+  img: string; 
+  marketId?: string; 
+  promotionalPrice?: number;
+  platformDiscount?: number;
+  description?: string;
+  isActive?: boolean;
+}
+export interface Market { id: string; name: string; rating: number; deliveryTime: string; fee: number; img: string; categories: string[]; cityId: string; isOpen?: boolean; address?: string; cover?: string; }
+export interface CartItem extends Product { qty: number; observation?: string; originalId?: string; marketId?: string; }
+export interface Order { id: string; date: string; total: number; status: 'Recebido' | 'Em separação' | 'Em entrega' | 'Entregue'; items: CartItem[]; marketName: string; userId?: string; marketId?: string; }
 
 export const CITIES = [
   { id: 'sao-paulo-sp', name: 'São Paulo, SP' },

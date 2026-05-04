@@ -35,6 +35,13 @@ export default function AdminDashboard() {
   const [isUploadingProduct, setIsUploadingProduct] = useState(false);
   const [productImagePreview, setProductImagePreview] = useState<string>('');
   
+  // Product Edit State
+  const [editingProduct, setEditingProduct] = useState<any | null>(null);
+  const [editProductImageFile, setEditProductImageFile] = useState<File | null>(null);
+  const [editProductImagePreview, setEditProductImagePreview] = useState<string>('');
+  const [editIsCreatingCategory, setEditIsCreatingCategory] = useState(false);
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
+  
   // Orders State
   const [storeOrders, setStoreOrders] = useState<any[]>([]);
   const [activeChatOrder, setActiveChatOrder] = useState<any | null>(null);
@@ -153,6 +160,53 @@ export default function AdminDashboard() {
     }
   }
 
+  const handleUpdateProduct = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if(!editingProduct || !selectedMarketId) return;
+
+    const finalCategory = editIsCreatingCategory ? editingProduct.newCategory?.trim() : editingProduct.category;
+    if (!finalCategory) return alert("Por favor, selecione ou digite uma categoria.");
+
+    setIsSavingEdit(true);
+    try {
+      let imageUrl = editingProduct.image || '';
+
+      // Upload nova imagem se selecionada
+      if (editProductImageFile) {
+        const fileExt = editProductImageFile.name.split('.').pop();
+        const fileName = `product_${selectedMarketId}_${Date.now()}.${fileExt}`;
+        const { error: uploadError } = await supabase.storage.from('markets').upload(fileName, editProductImageFile);
+        if (uploadError) throw uploadError;
+        imageUrl = supabase.storage.from('markets').getPublicUrl(fileName).data.publicUrl;
+      }
+
+      const updateData = {
+        name: editingProduct.name,
+        price: Number(editingProduct.price),
+        description: editingProduct.description,
+        category: finalCategory,
+        image: imageUrl
+      };
+
+      const { error } = await supabase.from('products').update(updateData).eq('id', editingProduct.id);
+      if (error) throw error;
+
+      alert("Produto atualizado com sucesso!");
+      setStoreProducts(prev => prev.map(p => p.id === editingProduct.id ? { ...p, ...updateData } : p));
+      setEditingProduct(null);
+      setEditProductImageFile(null);
+      setEditProductImagePreview('');
+      
+      if (!existingCategories.includes(finalCategory)) {
+        setExistingCategories(prev => [...prev, finalCategory]);
+      }
+    } catch (err: any) {
+      alert("Erro ao atualizar produto: " + (err.message || ''));
+    } finally {
+      setIsSavingEdit(false);
+    }
+  };
+
   const handleCreateMarket = async (e: React.FormEvent) => {
     e.preventDefault();
     if(!isSystemAdmin || !currentUser) return;
@@ -165,7 +219,8 @@ export default function AdminDashboard() {
            const fileExt = logoFile.name.split('.').pop();
            const fileName = `logo_${Date.now()}.${fileExt}`;
            const { error: uploadError, data } = await supabase.storage.from('markets').upload(fileName, logoFile);
-           if (!uploadError && data) {
+           if (uploadError) throw uploadError;
+           if (data) {
                logoUrl = supabase.storage.from('markets').getPublicUrl(fileName).data.publicUrl;
            }
        }
@@ -174,7 +229,8 @@ export default function AdminDashboard() {
            const fileExt = coverFile.name.split('.').pop();
            const fileName = `cover_${Date.now()}.${fileExt}`;
            const { error: uploadError, data } = await supabase.storage.from('markets').upload(fileName, coverFile);
-           if (!uploadError && data) {
+           if (uploadError) throw uploadError;
+           if (data) {
                coverUrl = supabase.storage.from('markets').getPublicUrl(fileName).data.publicUrl;
            }
        }
@@ -218,7 +274,6 @@ export default function AdminDashboard() {
   };
 
   const handleUpdateMarketImage = async (market: any, type: 'logo' | 'cover', file: File) => {
-      if (!isSystemAdmin) return;
       setIsUpdatingImage(`${market.id}-${type}`);
       try {
            const fileExt = file.name.split('.').pop();
@@ -675,6 +730,9 @@ export default function AdminDashboard() {
                                       {p.platformDiscount ? 'Edit Master Promo' : '+ Master Promo'}
                                    </button>
                                 )}
+                                 <button onClick={() => { setEditingProduct({...p}); setEditProductImagePreview(p.image || ''); setEditIsCreatingCategory(false); }} className="bg-blue-50 text-blue-700 text-xs font-bold py-1.5 rounded-lg hover:bg-blue-100 transition-colors">
+                                    Editar
+                                 </button>
                                 <button onClick={() => handleDeleteProduct(p.id)} className="bg-slate-50 text-red-500 text-xs font-bold py-1.5 rounded-lg hover:bg-red-50 transition-colors">
                                    Excluir
                                 </button>
@@ -909,6 +967,85 @@ export default function AdminDashboard() {
               </div>
            </div>
         )}
+         {/* Product Edit Modal */}
+         {editingProduct && (
+           <div className="fixed inset-0 bg-black/60 z-[100] flex items-center justify-center p-4 backdrop-blur-sm">
+             <div className="bg-white rounded-3xl w-full max-w-lg overflow-hidden shadow-2xl flex flex-col max-h-[90vh]">
+               <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+                  <h2 className="text-xl font-extrabold text-slate-800">Editar Produto</h2>
+                  <button onClick={() => setEditingProduct(null)} className="p-2 hover:bg-slate-200 rounded-full transition-colors">
+                     <X className="w-6 h-6 text-slate-500" />
+                  </button>
+               </div>
+               
+               <form onSubmit={handleUpdateProduct} className="p-6 overflow-y-auto flex flex-col gap-5">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                     <div className="flex flex-col gap-1.5">
+                        <label className="text-xs font-bold text-slate-500 uppercase ml-1">Nome</label>
+                        <input type="text" required className="border border-slate-200 p-3 rounded-xl outline-none focus:border-blue-500" value={editingProduct.name} onChange={e => setEditingProduct({...editingProduct, name: e.target.value})} />
+                     </div>
+                     <div className="flex flex-col gap-1.5">
+                        <label className="text-xs font-bold text-slate-500 uppercase ml-1">Preço (R$)</label>
+                        <input type="number" step="0.01" required className="border border-slate-200 p-3 rounded-xl outline-none focus:border-blue-500" value={editingProduct.price} onChange={e => setEditingProduct({...editingProduct, price: e.target.value})} />
+                     </div>
+                     
+                     <div className="flex flex-col gap-1.5 md:col-span-2">
+                        <label className="text-xs font-bold text-slate-500 uppercase ml-1">Categoria</label>
+                        <div className="flex gap-2">
+                           <select className="flex-1 border border-slate-200 p-3 rounded-xl outline-none focus:border-blue-500 bg-white" value={editIsCreatingCategory ? 'NEW' : editingProduct.category} onChange={e => { if(e.target.value === 'NEW') { setEditIsCreatingCategory(true); } else { setEditIsCreatingCategory(false); setEditingProduct({...editingProduct, category: e.target.value}); } }}>
+                              {existingCategories.map(c => <option key={c} value={c}>{c}</option>)}
+                              <option value="NEW">+ Nova Categoria</option>
+                           </select>
+                           {editIsCreatingCategory && (
+                              <input type="text" placeholder="Nome da nova categoria" required className="flex-1 border border-slate-200 p-3 rounded-xl outline-none focus:border-blue-500" value={editingProduct.newCategory || ''} onChange={e => setEditingProduct({...editingProduct, newCategory: e.target.value})} />
+                           )}
+                        </div>
+                     </div>
+
+                     <div className="flex flex-col gap-1.5 md:col-span-2">
+                        <label className="text-xs font-bold text-slate-500 uppercase ml-1">Descrição</label>
+                        <textarea className="border border-slate-200 p-3 rounded-xl outline-none focus:border-blue-500 resize-none h-20" value={editingProduct.description || ''} onChange={e => setEditingProduct({...editingProduct, description: e.target.value})} />
+                     </div>
+                  </div>
+
+                  <div className="flex flex-col gap-2">
+                     <label className="text-xs font-bold text-slate-500 uppercase ml-1">Imagem do Produto</label>
+                     <div className="flex gap-4 items-center bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                        <div className="w-24 h-24 bg-white rounded-xl border border-slate-200 flex items-center justify-center overflow-hidden shrink-0">
+                           {editProductImagePreview || editingProduct.image ? (
+                              <img src={editProductImagePreview || editingProduct.image} alt="Preview" className="w-full h-full object-cover" />
+                           ) : (
+                              <ImagePlus className="w-8 h-8 text-slate-300" />
+                           )}
+                        </div>
+                        <div className="flex flex-col gap-2 flex-1">
+                           <label className="bg-white border border-slate-200 rounded-xl px-4 py-2.5 text-sm font-bold text-slate-600 cursor-pointer hover:bg-slate-50 transition-all text-center">
+                              Trocar Imagem
+                              <input type="file" accept="image/*" className="hidden" onChange={(e) => {
+                                 const file = e.target.files?.[0];
+                                 if (file) {
+                                    setEditProductImageFile(file);
+                                    const reader = new FileReader();
+                                    reader.onloadend = () => setEditProductImagePreview(reader.result as string);
+                                    reader.readAsDataURL(file);
+                                 }
+                              }} />
+                           </label>
+                           <input type="text" placeholder="Ou cole a URL da imagem" className="border border-slate-200 p-2.5 rounded-xl outline-none focus:border-blue-500 text-xs" value={editingProduct.image || ''} onChange={e => { setEditingProduct({...editingProduct, image: e.target.value}); setEditProductImagePreview(''); setEditProductImageFile(null); }} />
+                        </div>
+                     </div>
+                  </div>
+
+                  <div className="flex gap-3 mt-2">
+                     <button type="button" onClick={() => setEditingProduct(null)} className="flex-1 bg-slate-100 text-slate-600 py-3.5 rounded-2xl font-bold hover:bg-slate-200 transition-colors">Cancelar</button>
+                     <button type="submit" disabled={isSavingEdit} className="flex-[2] bg-blue-600 text-white py-3.5 rounded-2xl font-extrabold hover:bg-blue-700 transition-colors shadow-lg shadow-blue-500/20 disabled:opacity-50">
+                        {isSavingEdit ? 'Salvando...' : 'Salvar Alterações'}
+                     </button>
+                  </div>
+               </form>
+             </div>
+           </div>
+         )}
 
       </main>
     </div>
