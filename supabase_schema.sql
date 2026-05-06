@@ -61,6 +61,7 @@ CREATE TABLE public.user_profiles (
     name TEXT NOT NULL,
     email TEXT NOT NULL,
     phone TEXT,
+    cpf TEXT,
     "activeAddressId" TEXT,
     addresses JSONB DEFAULT '[]'::jsonb, -- Usamos JSONB para guardar o array de endereços igual ao Firebase
     created_at TIMESTAMP WITH TIME ZONE DEFAULT TIMEZONE('utc'::text, NOW()) NOT NULL,

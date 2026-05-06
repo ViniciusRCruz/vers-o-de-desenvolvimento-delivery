@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useAppContext } from '../context/AppContext';
 import { useNavigate } from 'react-router-dom';
 import Header from '../components/Header';
-import { Plus, Minus } from 'lucide-react';
+import { Plus, Minus, ArrowLeft, MapPin, Wallet, CreditCard, Banknote, Trash2 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useDialog } from '../context/DialogContext';
 
