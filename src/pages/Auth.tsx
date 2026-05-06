@@ -87,6 +87,12 @@ export default function Auth() {
   const [loginError, setLoginError] = useState('');
   const [formError, setFormError] = useState('');
 
+  // Email Login States
+  const [loginEmail, setLoginEmail] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
+  const [isEmailLoginView, setIsEmailLoginView] = useState(false);
+  const [isRegistering, setIsRegistering] = useState(false);
+
   // Step state for onboarding
   const [authStep, setAuthStep] = useState<'login' | 'cpf' | 'profile' | 'address' | 'password_suggest'>('login');
 
@@ -131,6 +137,36 @@ export default function Auth() {
     } catch (error: any) {
       console.error(error);
       setLoginError(`Erro ao entrar: ${error.message}`);
+    }
+  };
+
+  const handleEmailAuth = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoginError('');
+    if (!loginEmail || !loginPassword) {
+      setLoginError('Por favor, preencha e-mail e senha.');
+      return;
+    }
+
+    try {
+      if (isRegistering) {
+        const { error } = await supabase.auth.signUp({
+          email: loginEmail,
+          password: loginPassword,
+        });
+        if (error) throw error;
+        // Supabase typically auto-logins after signup if confirmation is off
+        // If confirmation is on, we might need a message. For now assume auto-login.
+      } else {
+        const { error } = await supabase.auth.signInWithPassword({
+          email: loginEmail,
+          password: loginPassword,
+        });
+        if (error) throw error;
+      }
+    } catch (error: any) {
+      console.error(error);
+      setLoginError(`Erro na autenticação: ${error.message}`);
     }
   };
 
@@ -485,7 +521,61 @@ export default function Auth() {
                   Continuar com Google
                 </button>
 
-                <div className="mt-8 border-t border-slate-100 pt-6">
+                <div className="flex items-center gap-3 py-2">
+                  <div className="flex-1 h-px bg-slate-100"></div>
+                  <span className="text-xs font-bold text-slate-300 uppercase tracking-widest">ou use seu e-mail</span>
+                  <div className="flex-1 h-px bg-slate-100"></div>
+                </div>
+
+                {!isEmailLoginView ? (
+                  <button 
+                    onClick={() => setIsEmailLoginView(true)}
+                    className="w-full bg-slate-50 text-slate-600 py-4 rounded-xl font-bold hover:bg-slate-100 transition-colors border border-slate-200"
+                  >
+                    Entrar com E-mail e Senha
+                  </button>
+                ) : (
+                  <form onSubmit={handleEmailAuth} className="flex flex-col gap-4 animate-in fade-in slide-in-from-top-2 duration-300">
+                    <input 
+                      type="email" 
+                      placeholder="Seu E-mail" 
+                      className="w-full bg-slate-50 border border-slate-200 p-3.5 rounded-xl focus:outline-none focus:border-[#003B5C] focus:ring-1 focus:ring-[#003B5C] transition-all font-medium"
+                      value={loginEmail}
+                      onChange={e => setLoginEmail(e.target.value)}
+                    />
+                    <input 
+                      type="password" 
+                      placeholder="Sua Senha" 
+                      className="w-full bg-slate-50 border border-slate-200 p-3.5 rounded-xl focus:outline-none focus:border-[#003B5C] focus:ring-1 focus:ring-[#003B5C] transition-all font-medium"
+                      value={loginPassword}
+                      onChange={e => setLoginPassword(e.target.value)}
+                    />
+                    <button 
+                      type="submit" 
+                      className="w-full bg-[#003B5C] text-white py-4 rounded-xl font-bold hover:bg-[#002B44] transition-colors shadow"
+                    >
+                      {isRegistering ? 'Criar Conta' : 'Entrar'}
+                    </button>
+                    <div className="flex justify-between items-center px-1">
+                      <button 
+                        type="button"
+                        onClick={() => setIsRegistering(!isRegistering)}
+                        className="text-xs font-bold text-[#003B5C] hover:underline"
+                      >
+                        {isRegistering ? 'Já tenho uma conta' : 'Ainda não tenho conta'}
+                      </button>
+                      <button 
+                        type="button"
+                        onClick={() => setIsEmailLoginView(false)}
+                        className="text-xs font-bold text-slate-400 hover:text-slate-600"
+                      >
+                        Voltar
+                      </button>
+                    </div>
+                  </form>
+                )}
+
+                <div className="mt-4 border-t border-slate-100 pt-6">
                    <h3 className="text-sm font-bold text-slate-500 mb-3 text-center uppercase tracking-wider">Onde você está?</h3>
                    <select 
                      className="w-full bg-slate-50 border border-slate-200 p-4 rounded-2xl font-bold text-slate-700 outline-none focus:border-[#003B5C] transition-all cursor-pointer shadow-sm text-center"
